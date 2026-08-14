@@ -140,6 +140,27 @@ async function main() {
   await guest.waitForSelector('#play:not(.hide)', { timeout: 12000 });
   check('rematch starts for everyone', true);
 
+  // ---- running out of time locks you in, it doesn't score you as absent ----
+  check('lock hint offered before locking', await visible(host, '#lockHint'));
+  await host.locator('#sH').fill('142');
+  await host.locator('#sS').fill('77');
+  await host.locator('#sB').fill('64');
+  const chosen = await host.locator('#preview').evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  // Nobody touches the button — sit the whole guess window out. The lock fires
+  // just before the deadline, so the next screen either player sees is the
+  // reveal; that reveal is the assertion.
+  console.log('  … sitting out a 45s round to check the automatic lock-in');
+  await host.waitForSelector('#reveal:not(.hide)', { timeout: 70000 });
+  const autoScore = (await host.textContent('#rScore')).trim();
+  check('the auto-locked colour was scored', /^\d+\.\d{2}$/.test(autoScore), autoScore);
+  const autoMine = await host.locator('#rMine').evaluate((el) => getComputedStyle(el).backgroundColor);
+  check('scored colour is the one left on the sliders', autoMine === chosen, `${autoMine} vs ${chosen}`);
+  check('both sitting-out players were locked in, not skipped',
+    (await host.locator('#revealList .prow .sc').allTextContents())
+      .every((t) => /^\d+\.\d{2}$/.test(t.trim())));
+  await host.screenshot({ path: `${SHOTS}/6-autolock.png`, fullPage: true });
+
   check('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(`\n${failures === 0 ? 'UI CHECKS PASSED' : failures + ' UI CHECK(S) FAILED'}`);

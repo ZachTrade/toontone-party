@@ -276,6 +276,9 @@
         </div>
       </div>
       <button id="btnLock" class="wide">Lock it in</button>
+      <p id="lockHint" class="tiny" style="text-align:center">
+        Whatever colour you're on when the timer ends gets locked in automatically.
+      </p>
       <p id="lockedMsg" class="muted hide" style="text-align:center">
         Locked in — waiting for the others…
       </p>
@@ -488,6 +491,7 @@
     }
     const locked = !!st.mySubmission || lockedRoundKey === key;
     $('btnLock').classList.toggle('hide', locked);
+    $('lockHint').classList.toggle('hide', locked);
     $('lockedMsg').classList.toggle('hide', !locked);
     for (const el of [sH, sS, sB]) el.disabled = locked;
 
@@ -522,7 +526,9 @@
       $('rMineLogo').innerHTML = '<span class="tiny" style="color:#8b8b95">no guess</span>';
       $('rMineHex').textContent = 'no guess';
       $('rScore').textContent = '—';
-      $('rScoreNote').textContent = 'you missed this round';
+      // The timer locks a colour in for anyone who's actually on the page, so
+      // reaching here means they were away for the whole round.
+      $('rScoreNote').textContent = 'you were away for this one';
     }
 
     const ranked = st.players.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -575,6 +581,11 @@
   }
 
   // ---------------------------------------------------------------- timer
+
+  // Fire the automatic lock-in this far before the deadline, so the request
+  // still lands inside the grace period the server allows on `submit`.
+  const AUTO_LOCK_MS = 600;
+
   function tickTimer() {
     if (!last || !last.endsAt) return;
     const left = Math.max(0, last.endsAt - (Date.now() + clockSkew));
@@ -583,6 +594,9 @@
       $('timePill').textContent = Math.ceil(left / 1000) + 's';
       $('timerBar').querySelector('i').style.width = (pct * 100).toFixed(1) + '%';
       $('timerBar').classList.toggle('low', pct < 0.28);
+      // Running out of time locks in the colour you're sitting on rather than
+      // scoring you as though you never played the round.
+      if (left <= AUTO_LOCK_MS) lockIn(true);
     } else if (last.phase === 'reveal') {
       const secs = Math.ceil(left / 1000);
       $('revNext').textContent = last.round >= last.totalRounds
@@ -731,23 +745,41 @@
     $('btnAgain').disabled = false;
   });
 
-  $('btnLock').addEventListener('click', async () => {
+  /**
+   * Send whatever colour the sliders are on. `auto` marks the submission the
+   * expiring timer made on the player's behalf rather than a tap on the button.
+   */
+  async function lockIn(auto) {
     if (submitting || !last || last.phase !== 'guess') return;
+    const key = last.gameId + ':' + last.round;
+    if (lockedRoundKey === key || last.mySubmission) return;
+
     submitting = true;
+    // Claim the round before awaiting, so the 200ms timer tick can't fire a
+    // second submission while this one is still in flight.
+    lockedRoundKey = key;
     $('btnLock').disabled = true;
     const guess = { h: +sH.value, s: +sS.value, b: +sB.value };
     try {
       const r = await api('submit', { code: me.code, pid: me.pid, ...guess });
-      if (r.error === 'too_late') toast("Time's up on that one!");
-      else lockedRoundKey = last.gameId + ':' + last.round;
+      if (r.error === 'too_late') {
+        toast("Time's up on that one!");
+      } else if (r.error) {
+        lockedRoundKey = ''; // let them try again
+        toast("That didn't send — try once more.");
+      } else if (auto) {
+        toast("Time's up — locked in your colour");
+      }
       await pollOnce();
     } catch {
+      lockedRoundKey = '';
       toast('Network hiccup — try once more.');
     } finally {
       submitting = false;
       $('btnLock').disabled = false;
     }
-  });
+  }
+  $('btnLock').addEventListener('click', () => lockIn(false));
 
   async function copy(text, label) {
     try {

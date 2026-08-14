@@ -1,5 +1,11 @@
 // Serves index.html plus the /api/game function, backed by the fake Redis.
-require('./fake-redis.js').install(process.env.UPSTASH_REDIS_REST_URL || '');
+//
+// The stand-in only intercepts calls to the Redis base URL, so it needs a real
+// one to match against — an empty base would swallow every fetch in the
+// process. Point it at a hostname nothing else uses when no database is set.
+process.env.UPSTASH_REDIS_REST_URL ||= 'http://fake-redis.local';
+process.env.UPSTASH_REDIS_REST_TOKEN ||= 'local-dev';
+require('./fake-redis.js').install(process.env.UPSTASH_REDIS_REST_URL);
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

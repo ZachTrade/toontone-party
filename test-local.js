@@ -1,7 +1,11 @@
 // Local smoke test: runs the serverless handler over a real HTTP server and
 // plays a full game with three players.
 const http = require('http');
-require('./fake-redis.js').install(process.env.UPSTASH_REDIS_REST_URL || '');
+// See dev-server.js: an empty base URL would make the stand-in swallow the
+// test's own HTTP calls too, so give it something specific to match on.
+process.env.UPSTASH_REDIS_REST_URL ||= 'http://fake-redis.local';
+process.env.UPSTASH_REDIS_REST_TOKEN ||= 'local-dev';
+require('./fake-redis.js').install(process.env.UPSTASH_REDIS_REST_URL);
 const handler = require('./api/game.js');
 const { scoreGuess, hexToHsb, buildRounds } = require('./api/_lib.js');
 
@@ -45,6 +49,23 @@ async function main() {
   check('5 rounds built', rounds.length === 5, String(rounds.length));
   check('no repeated brand', new Set(rounds.map((r) => r.brand)).size === 5);
   check('rounds carry hsb', rounds.every((r) => Number.isFinite(r.h) && Number.isFinite(r.s)));
+
+  console.log('\n== logo marks ==');
+  // logos.js attaches to `window` in the browser and to globalThis here.
+  require('./logos.js');
+  const { BRANDS } = require('./api/_brands.js');
+  const noMark = BRANDS.filter((b) => !ToonLogos.has(b.brand, b.element));
+  check('every prompt has a mark', noMark.length === 0,
+    noMark.map((b) => b.brand).join(', '));
+  const realCount = BRANDS.filter((b) => ToonLogos.isReal(b.brand, b.element)).length;
+  check('most prompts use real brand artwork', realCount >= 70,
+    `${realCount}/${BRANDS.length}`);
+  const svg = ToonLogos.logoSvg('Spotify', 'the logo green', 'rgb(1,2,3)');
+  check('mark tints with the given colour', svg.includes('rgb(1,2,3)') && !svg.includes('CURRENT'));
+  // Only one part of these is the colour in play; the rest must stay neutral.
+  const mc = ToonLogos.logoSvg('Mastercard', 'the left circle red', 'rgb(1,2,3)');
+  check('element-specific mark keeps its other parts neutral',
+    mc.includes('rgb(1,2,3)') && mc.includes('#c7cad2'));
 
   console.log('\n== room flow ==');
   const host = await call('create', { name: 'Zach' });
