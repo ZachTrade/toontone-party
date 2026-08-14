@@ -1,2 +1,5 @@
 node_modules/
 package-lock.json
+
+# Logo sources are the brand owners' artwork — see tools/logos-src/README.md
+tools/logos-src/*.svg

@@ -9,6 +9,10 @@
   "scripts": {
     "dev": "node dev-server.js",
     "test": "node test-local.js",
-    "test:ui": "node test-ui.js"
+    "test:ui": "node test-ui.js",
+    "logos": "node tools/add-logos.js"
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "^0.9.11"
   }
 }

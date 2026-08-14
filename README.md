@@ -65,6 +65,9 @@ meaningless, so for those it neither carries weight nor scales anything. See
 | `api/game.js` | The one API endpoint; `op` selects create / join / start / submit / state |
 | `api/_lib.js` | Redis client, colour maths, scoring, round building |
 | `api/_brands.js` | The brand list with official colours and difficulty tiers |
+| `tools/add-logos.js` | Merges SVGs from `tools/logos-src/` into `logos.js` (`npm run logos`) |
+| `tools/svg-to-mark.js` | Turns a real-world SVG into a flat, re-tintable mark |
+| `tools/wanted.js` | Brands the game wants but has no artwork for yet |
 
 Clients poll `/api/game` about once a second rather than using WebSockets, which keeps
 the whole thing inside Vercel's serverless model with no persistent connections.
@@ -87,19 +90,40 @@ through older releases to fill them in — 67 marks come from 16.x, the remainin
 13.x, 11.x and 9.x. The logos themselves remain trademarks of their respective owners;
 the game names each brand out loud and uses its mark to ask you about that brand.
 
-### Updating the marks
+A mark is either a bare path string — one outline on the 24×24 grid, which is how every
+simple-icons mark arrives — or a `[viewBox, markup]` pair for artwork that needs several
+shapes or a different grid. That second form is what logos from outside simple-icons
+use.
 
-To add a brand, add a row to `api/_brands.js` **and** its path to `PATHS` in `logos.js`.
-If simple-icons doesn't carry the brand, it can't go on the list — that's the constraint
-that keeps every round showing something real.
+### Adding a brand simple-icons doesn't carry
 
-That constraint bites hardest on Malaysian brands. Of the household names, only
-**AirAsia, Grab, Shopee and foodpanda** have real artwork available. Petronas, Maybank,
-Touch 'n Go, Maxis, Celcom, Perodua, Tealive, Milo and the rest aren't in simple-icons at
-any version, so they're out until their marks come from somewhere else. Watch for
-name collisions when checking: simple-icons' `KTM` is the Austrian motorcycle firm,
-`Proton` is the Swiss email company, `Astro` is the JavaScript framework and `Boost` is
-the US carrier — none of them the Malaysian brand of the same name.
+simple-icons covers 82 brands here and has never carried the rest — LEGO, Oreo, Costco,
+Petronas, Maybank, Touch 'n Go and 30-odd others. `tools/wanted.js` is the standing list
+of what's missing, with the colour and tier each one needs.
+
+Drop the logo into `tools/logos-src/<Brand Name>.svg` and run:
+
+```bash
+npm i -D @xmldom/xmldom     # once
+npm run logos               # add --check to preview without writing
+```
+
+`tools/svg-to-mark.js` keeps the geometry and the transforms, throws away every paint,
+and writes `CURRENT` where the player's colour goes — so gradients, CSS classes, inline
+fills and stroke colours all collapse into one tintable shape. Anything it can't convert
+honestly (embedded bitmaps, live text, `<use>` references) is **reported rather than
+dropped in silence**, because a logo missing half its shapes still renders, just wrongly.
+`npm run logos` only ever adds or replaces marks, so it can't wipe the simple-icons
+table. It then prints the row to paste into `api/_brands.js` — a brand isn't in the game
+until that row exists.
+
+`tools/logos-src/README.md` covers what makes a good source file, and how to check
+licensing on Wikimedia Commons.
+
+Watch for name collisions when hunting for Malaysian brands: simple-icons' `KTM` is the
+Austrian motorcycle firm, `Proton` is the Swiss email company, `Astro` is the JavaScript
+framework and `Boost` is the US carrier — none of them the Malaysian brand of the same
+name.
 
 ## Local development
 

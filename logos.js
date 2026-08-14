@@ -120,10 +120,16 @@
     };
   }
 
+  /* An entry is either a bare path string — one outline on the 24x24 grid, which
+     is how every simple-icons mark arrives — or a [viewBox, markup] pair, for
+     artwork that needs several shapes or a different grid. */
   function lookup(brand) {
-    const d = PATHS[brand];
-    if (!d) return initialsMark(brand);
-    return { vb: '0 0 24 24', inner: `<path fill="CURRENT" d="${d}"/>` };
+    const entry = PATHS[brand];
+    if (!entry) return initialsMark(brand);
+    if (typeof entry === 'string') {
+      return { vb: '0 0 24 24', inner: `<path fill="CURRENT" d="${entry}"/>` };
+    }
+    return { vb: entry[0], inner: entry[1] };
   }
 
   /** Returns an <svg> string for the brand's mark, tinted with `color`. */
@@ -141,5 +147,7 @@
     logoSvg: logoSvg,
     /** True when we hold the brand's real artwork (not the initials stand-in). */
     has: (brand) => !!PATHS[brand],
+    /** The raw table, so tools/add-logos.js can merge into it. */
+    marks: () => PATHS,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

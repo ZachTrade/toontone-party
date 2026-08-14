@@ -58,13 +58,52 @@ async function main() {
   const noMark = BRANDS.filter((b) => !ToonLogos.has(b.brand));
   check('every brand has real logo artwork', noMark.length === 0,
     noMark.map((b) => b.brand).join(', '));
-  const svg = ToonLogos.logoSvg('Spotify', 'rgb(1,2,3)');
-  check('mark tints with the given colour', svg.includes('rgb(1,2,3)') && !svg.includes('CURRENT'));
+  const SENTINEL = 'rgb(1,2,3)';
+  const svg = ToonLogos.logoSvg('Spotify', SENTINEL);
+  check('mark tints with the given colour', svg.includes(SENTINEL) && !svg.includes('CURRENT'));
   check('mark is a real outline, not an initials tile',
     svg.includes('<path') && !svg.includes('<text'));
-  // Nothing may stay a fixed colour, or part of the mark would ignore the sliders.
-  check('the whole mark takes the colour',
-    (svg.match(/fill="/g) || []).length === 1);
+
+  // Every shape has to follow the sliders. A mark that kept a colour of its own
+  // — a leftover hex, a gradient reference — would sit there ignoring the
+  // player, which is exactly what a bad SVG conversion leaves behind.
+  const leaky = BRANDS.filter((b) => {
+    const s = ToonLogos.logoSvg(b.brand, SENTINEL).split(SENTINEL).join('');
+    return /#[0-9a-fA-F]{3,8}\b|url\(|rgb\(|hsl\(|\b(?:fill|stroke)="(?!none")[a-z]/i.test(s);
+  });
+  check('no mark keeps a colour of its own', leaky.length === 0,
+    leaky.map((b) => b.brand).join(', '));
+  check('no mark leaves an unsubstituted CURRENT',
+    !BRANDS.some((b) => ToonLogos.logoSvg(b.brand, SENTINEL).includes('CURRENT')));
+
+  // The SVG converter is what lets real artwork in, so check it strips the
+  // things logos in the wild are full of. Skipped when the parser isn't
+  // installed, since it's only needed to add marks, never to play.
+  let convert = null;
+  try { ({ convert } = require('./tools/svg-to-mark.js')); } catch { /* dev-only */ }
+  if (!convert) {
+    console.log('  [SKIP] svg converter (npm i -D @xmldom/xmldom to cover it)');
+  } else {
+    const messy = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 20">
+      <defs><linearGradient id="g"/></defs><style>.a{fill:#0f0}</style>
+      <g transform="translate(2,2)">
+        <path class="a" fill="url(#g)" fill-rule="evenodd" d="M0 0h9v9H0z"/>
+        <circle cx="20" cy="8" r="5" style="fill:#123456"/>
+      </g>
+      <path d="M0 18h50" fill="none" stroke="#000" stroke-width="3"/>
+      <text x="1" y="9">no</text></svg>`;
+    const m = convert(messy, { name: 'messy.svg' });
+    check('converter keeps the viewBox', m.viewBox === '0 0 50 20', m.viewBox);
+    check('converter keeps every shape', m.shapes === 3, String(m.shapes));
+    check('converter keeps group transforms', m.inner.includes('translate(2,2)'));
+    check('converter keeps fill-rule, so holes survive', m.inner.includes('fill-rule="evenodd"'));
+    check('converter keeps stroke-only shapes visible',
+      m.inner.includes('stroke="CURRENT"') && m.inner.includes('stroke-width="3"'));
+    check('converter strips gradients, classes and inline colours',
+      !/#[0-9a-fA-F]{3,6}|url\(|class=/.test(m.inner), m.inner.slice(0, 90));
+    check('converter reports what it had to drop',
+      m.warnings.some((w) => /text/i.test(w)), m.warnings.join('; '));
+  }
 
   console.log('\n== room flow ==');
   const host = await call('create', { name: 'Zach' });
