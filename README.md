@@ -1,7 +1,7 @@
 # Toon Tone Party
 
 A multiplayer brand-colour guessing game. Each round names a famous brand and one
-specific element of it — the golden arches, the siren green, Tiffany's box blue — and
+specific element of it — the golden arches, the siren green, AirAsia red — and
 shows **the brand's actual logo**, drained of colour. Everyone rebuilds the shade from
 memory on hue / saturation / brightness sliders, **and the logo repaints itself live as
 you drag**, so you're judging the colour on the real mark rather than an abstract
@@ -61,7 +61,7 @@ meaningless, so for those it neither carries weight nor scales anything. See
 | Path | What it is |
 | --- | --- |
 | `index.html` | The whole client — every screen, the sliders, the timer, polling |
-| `logos.js` | ~100 brand marks as re-tintable inline SVG (see below) |
+| `logos.js` | 82 real brand marks as re-tintable inline SVG (see below) |
 | `api/game.js` | The one API endpoint; `op` selects create / join / start / submit / state |
 | `api/_lib.js` | Redis client, colour maths, scoring, round building |
 | `api/_brands.js` | The brand list with official colours and difficulty tiers |
@@ -71,29 +71,35 @@ the whole thing inside Vercel's serverless model with no persistent connections.
 
 ### About the logos
 
-Every entry in `logos.js` stores SVG markup in which the token `CURRENT` is swapped for
-the player's colour at render time; any other fill is static. There are three tiers,
-checked in this order:
+Every one of the 82 marks in `logos.js` is the brand's **actual logo** — an exact vector
+outline on a 24×24 grid, stored as a single path so the whole shape re-tints as one
+piece when the sliders move. The token `CURRENT` is swapped for the player's colour at
+render time, and nothing in a mark is a fixed colour.
 
-| Tier | What it is |
-| --- | --- |
-| `PARTIAL` | Keyed `"Brand\|element"`. Multi-part marks where only **one** part is the colour in play, so the rest has to stay neutral grey — Mastercard's left circle, a single letter of the Google logo. Has to beat `REAL`, or the prompt stops making sense. |
-| `REAL` | The brand's actual logo artwork: exact vector outlines on a 24×24 grid, one path, so the whole mark re-tints as a single shape. **78 brands.** |
-| `DRAWN` | Original approximations, kept only for the 23 brands with no real mark available (LEGO, Barbie, Tiffany & Co., Oreo, Costco, the Olympic rings…). |
+There are no approximations and no part-tinted marks: **a brand either has real artwork
+or it isn't in the game.** `npm test` fails if a row in `api/_brands.js` has no mark, so
+the two files can't drift apart.
 
-Anything not covered falls back to a tinted tile of the brand's initials — `npm test`
-asserts that no prompt actually lands there.
-
-The real outlines come from [simple-icons](https://github.com/simple-icons/simple-icons)
+The outlines come from [simple-icons](https://github.com/simple-icons/simple-icons)
 (CC0-1.0), inlined at build time so the game ships no runtime dependency. Newer releases
 of that project have dropped a number of consumer brands, so the generator falls back
-through older releases to fill them in — 63 marks come from 16.x, the remaining 15 from
+through older releases to fill them in — 67 marks come from 16.x, the remaining 15 from
 13.x, 11.x and 9.x. The logos themselves remain trademarks of their respective owners;
 the game names each brand out loud and uses its mark to ask you about that brand.
 
-To add a brand: add a row to `api/_brands.js`. If simple-icons carries it, add its path
-to `REAL`; otherwise draw a mark into `DRAWN`, or into `PARTIAL` keyed `"Brand|element"`
-when only one part should recolour.
+### Updating the marks
+
+To add a brand, add a row to `api/_brands.js` **and** its path to `PATHS` in `logos.js`.
+If simple-icons doesn't carry the brand, it can't go on the list — that's the constraint
+that keeps every round showing something real.
+
+That constraint bites hardest on Malaysian brands. Of the household names, only
+**AirAsia, Grab, Shopee and foodpanda** have real artwork available. Petronas, Maybank,
+Touch 'n Go, Maxis, Celcom, Perodua, Tealive, Milo and the rest aren't in simple-icons at
+any version, so they're out until their marks come from somewhere else. Watch for
+name collisions when checking: simple-icons' `KTM` is the Austrian motorcycle firm,
+`Proton` is the Swiss email company, `Astro` is the JavaScript framework and `Boost` is
+the US carrier — none of them the Malaysian brand of the same name.
 
 ## Local development
 

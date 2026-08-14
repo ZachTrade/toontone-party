@@ -54,18 +54,17 @@ async function main() {
   // logos.js attaches to `window` in the browser and to globalThis here.
   require('./logos.js');
   const { BRANDS } = require('./api/_brands.js');
-  const noMark = BRANDS.filter((b) => !ToonLogos.has(b.brand, b.element));
-  check('every prompt has a mark', noMark.length === 0,
+  // Every brand on the list has to have real artwork — no stand-ins.
+  const noMark = BRANDS.filter((b) => !ToonLogos.has(b.brand));
+  check('every brand has real logo artwork', noMark.length === 0,
     noMark.map((b) => b.brand).join(', '));
-  const realCount = BRANDS.filter((b) => ToonLogos.isReal(b.brand, b.element)).length;
-  check('most prompts use real brand artwork', realCount >= 70,
-    `${realCount}/${BRANDS.length}`);
-  const svg = ToonLogos.logoSvg('Spotify', 'the logo green', 'rgb(1,2,3)');
+  const svg = ToonLogos.logoSvg('Spotify', 'rgb(1,2,3)');
   check('mark tints with the given colour', svg.includes('rgb(1,2,3)') && !svg.includes('CURRENT'));
-  // Only one part of these is the colour in play; the rest must stay neutral.
-  const mc = ToonLogos.logoSvg('Mastercard', 'the left circle red', 'rgb(1,2,3)');
-  check('element-specific mark keeps its other parts neutral',
-    mc.includes('rgb(1,2,3)') && mc.includes('#c7cad2'));
+  check('mark is a real outline, not an initials tile',
+    svg.includes('<path') && !svg.includes('<text'));
+  // Nothing may stay a fixed colour, or part of the mark would ignore the sliders.
+  check('the whole mark takes the colour',
+    (svg.match(/fill="/g) || []).length === 1);
 
   console.log('\n== room flow ==');
   const host = await call('create', { name: 'Zach' });

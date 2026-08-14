@@ -1,5 +1,9 @@
 // Famous brand colors. `hex` is the official / most widely cited brand value.
 // tier: 1 = iconic & saturated, 2 = medium, 3 = subtle or commonly misremembered.
+//
+// Every brand here must have real logo artwork in logos.js — the game shows the
+// actual mark, so a brand with no real vector available doesn't belong on the
+// list. `npm test` fails if one slips in.
 const BRANDS = [
   // ---- tier 1 ----
   { brand: "McDonald's", element: 'the golden arches', emoji: '🍟', hex: '#FFC72C', tier: 1 },
@@ -11,19 +15,13 @@ const BRANDS = [
   { brand: 'YouTube', element: 'the play button red', emoji: '▶️', hex: '#FF0000', tier: 1 },
   { brand: 'WhatsApp', element: 'the logo green', emoji: '💬', hex: '#25D366', tier: 1 },
   { brand: 'Snapchat', element: 'the ghost background yellow', emoji: '👻', hex: '#FFFC00', tier: 1 },
-  { brand: 'LEGO', element: 'the logo red', emoji: '🧱', hex: '#D01012', tier: 1 },
   { brand: 'Ferrari', element: 'Rosso Corsa red', emoji: '🏎️', hex: '#FF2800', tier: 1 },
-  { brand: 'Barbie', element: 'the box pink', emoji: '💖', hex: '#E0218A', tier: 1 },
-  { brand: 'Tiffany & Co.', element: 'the box blue', emoji: '💍', hex: '#0ABAB5', tier: 1 },
   { brand: 'Amazon', element: 'the smile arrow orange', emoji: '📦', hex: '#FF9900', tier: 1 },
   { brand: 'IKEA', element: 'the logo blue', emoji: '🛋️', hex: '#0058A3', tier: 1 },
-  { brand: 'The Home Depot', element: 'the logo orange', emoji: '🔨', hex: '#F96302', tier: 1 },
   { brand: 'Target', element: 'the bullseye red', emoji: '🎯', hex: '#CC0000', tier: 1 },
   { brand: 'T-Mobile', element: 'the magenta', emoji: '📱', hex: '#E20074', tier: 1 },
   { brand: 'Pokémon', element: 'the logo yellow', emoji: '⚡', hex: '#FFCB05', tier: 1 },
   { brand: 'John Deere', element: 'the tractor green', emoji: '🚜', hex: '#367C2B', tier: 1 },
-  { brand: 'Cadbury', element: 'the wrapper purple', emoji: '🍫', hex: '#4A2683', tier: 1 },
-  { brand: 'Fanta', element: 'the logo orange', emoji: '🍊', hex: '#FF8300', tier: 1 },
   { brand: 'Nintendo', element: 'the logo red', emoji: '🎮', hex: '#E60012', tier: 1 },
   { brand: 'Xbox', element: 'the logo green', emoji: '🕹️', hex: '#107C10', tier: 1 },
   { brand: 'Discord', element: 'Blurple', emoji: '💬', hex: '#5865F2', tier: 1 },
@@ -33,19 +31,21 @@ const BRANDS = [
   { brand: 'Shell', element: 'the pecten yellow', emoji: '⛽', hex: '#FBCE07', tier: 1 },
   { brand: 'Duolingo', element: 'the owl green', emoji: '🦉', hex: '#58CC02', tier: 1 },
 
+  // ---- tier 1, big in Malaysia ----
+  { brand: 'AirAsia', element: 'the logo red', emoji: '✈️', hex: '#FF0000', tier: 1 },
+  { brand: 'Grab', element: 'the logo green', emoji: '🚗', hex: '#00B14F', tier: 1 },
+  { brand: 'Shopee', element: 'the shopping bag orange', emoji: '🛍️', hex: '#EE4D2D', tier: 1 },
+
   // ---- tier 2 ----
   { brand: 'Pepsi', element: 'the logo blue', emoji: '🥤', hex: '#004B93', tier: 2 },
   { brand: 'Burger King', element: 'the logo red', emoji: '🍔', hex: '#D62300', tier: 2 },
   { brand: 'KFC', element: 'the bucket red', emoji: '🍗', hex: '#E4002B', tier: 2 },
-  { brand: 'Subway', element: 'the logo green', emoji: '🥪', hex: '#009A44', tier: 2 },
-  { brand: "Domino's", element: 'the logo blue', emoji: '🍕', hex: '#006491', tier: 2 },
   { brand: 'Taco Bell', element: 'the logo purple', emoji: '🌮', hex: '#702082', tier: 2 },
-  { brand: "Dunkin'", element: 'the logo pink', emoji: '🍩', hex: '#DA1884', tier: 2 },
   { brand: 'Walmart', element: 'the logo blue', emoji: '🛒', hex: '#0071CE', tier: 2 },
   { brand: 'FedEx', element: 'the logo purple', emoji: '📦', hex: '#4D148C', tier: 2 },
   { brand: 'DHL', element: 'the logo yellow', emoji: '✈️', hex: '#FFCC00', tier: 2 },
   { brand: 'Visa', element: 'the logo blue', emoji: '💳', hex: '#1A1F71', tier: 2 },
-  { brand: 'Mastercard', element: 'the left circle red', emoji: '💳', hex: '#EB001B', tier: 2 },
+  { brand: 'Mastercard', element: 'the logo red', emoji: '💳', hex: '#EB001B', tier: 2 },
   { brand: 'PayPal', element: 'the dark logo blue', emoji: '💰', hex: '#003087', tier: 2 },
   { brand: 'LinkedIn', element: 'the logo blue', emoji: '💼', hex: '#0A66C2', tier: 2 },
   { brand: 'Airbnb', element: 'the Bélo pink', emoji: '🏠', hex: '#FF5A5F', tier: 2 },
@@ -58,28 +58,17 @@ const BRANDS = [
   { brand: 'Tesla', element: 'the logo red', emoji: '⚡', hex: '#E82127', tier: 2 },
   { brand: 'Volkswagen', element: 'the logo blue', emoji: '🚐', hex: '#001E50', tier: 2 },
   { brand: 'Red Bull', element: 'the logo blue', emoji: '🐂', hex: '#001489', tier: 2 },
-  { brand: 'Heineken', element: 'the bottle green', emoji: '🍺', hex: '#00843D', tier: 2 },
-  { brand: 'Monster Energy', element: 'the claw green', emoji: '🥤', hex: '#84C226', tier: 2 },
-  { brand: 'Gatorade', element: 'the classic orange', emoji: '🧃', hex: '#FF6600', tier: 2 },
   { brand: 'PlayStation', element: 'the logo blue', emoji: '🎮', hex: '#003791', tier: 2 },
-  { brand: 'Rolex', element: 'the crown green', emoji: '⌚', hex: '#006039', tier: 2 },
   { brand: 'Hermès', element: 'the box orange', emoji: '👜', hex: '#F37021', tier: 2 },
   { brand: 'HSBC', element: 'the hexagon red', emoji: '🏦', hex: '#DB0011', tier: 2 },
   { brand: 'Vodafone', element: 'the speech mark red', emoji: '📶', hex: '#E60000', tier: 2 },
-  { brand: 'National Geographic', element: 'the yellow frame', emoji: '📸', hex: '#FFCC00', tier: 2 },
   { brand: 'Caterpillar', element: 'the machine yellow', emoji: '🚧', hex: '#FFCD11', tier: 2 },
-  { brand: 'Best Buy', element: 'the price tag yellow', emoji: '🔌', hex: '#FFF200', tier: 2 },
-  { brand: 'Costco', element: 'the logo red', emoji: '🛒', hex: '#E31837', tier: 2 },
   { brand: 'Chase', element: 'the octagon blue', emoji: '🏦', hex: '#117ACA', tier: 2 },
   { brand: 'American Express', element: 'the blue box', emoji: '💳', hex: '#006FCF', tier: 2 },
   { brand: 'Formula 1', element: 'the logo red', emoji: '🏁', hex: '#E10600', tier: 2 },
   { brand: 'NBA', element: 'the logo blue', emoji: '🏀', hex: '#1D428A', tier: 2 },
-  { brand: 'Milka', element: 'the wrapper lilac', emoji: '🐄', hex: '#7D69AC', tier: 2 },
-  { brand: 'Oreo', element: 'the pack blue', emoji: '🍪', hex: '#0057B8', tier: 2 },
-  { brand: 'Doritos', element: 'the Nacho Cheese red', emoji: '🌽', hex: '#C8102E', tier: 2 },
   { brand: 'Hulu', element: 'the logo green', emoji: '📺', hex: '#1CE783', tier: 2 },
   { brand: 'Prime Video', element: 'the logo blue', emoji: '📺', hex: '#00A8E1', tier: 2 },
-  { brand: 'Disney+', element: 'the logo blue', emoji: '🏰', hex: '#0063E5', tier: 2 },
   { brand: 'Zoom', element: 'the logo blue', emoji: '💻', hex: '#0B5CFF', tier: 2 },
   { brand: 'Telegram', element: 'the paper plane blue', emoji: '✈️', hex: '#24A1DE', tier: 2 },
   { brand: 'Adobe', element: 'the logo red', emoji: '🅰️', hex: '#FA0F00', tier: 2 },
@@ -99,15 +88,15 @@ const BRANDS = [
   { brand: 'Dell', element: 'the logo blue', emoji: '💻', hex: '#007DB8', tier: 2 },
   { brand: 'Oracle', element: 'the logo red', emoji: '🗄️', hex: '#C74634', tier: 2 },
 
+  // ---- tier 2, big in Malaysia ----
+  { brand: 'foodpanda', element: 'the logo pink', emoji: '🍜', hex: '#D70F64', tier: 2 },
+
   // ---- tier 3: subtle, dark, pale or commonly misremembered ----
   { brand: 'Nike', element: 'the Volt shoe colour', emoji: '👟', hex: '#CEFF00', tier: 3 },
   { brand: 'Apple', element: 'the Space Grey finish', emoji: '🍎', hex: '#86868B', tier: 3 },
   { brand: 'Mercedes-Benz', element: 'the star silver', emoji: '🚘', hex: '#A4AAAE', tier: 3 },
-  { brand: 'Louis Vuitton', element: 'the monogram canvas brown', emoji: '👜', hex: '#4E3524', tier: 3 },
-  { brand: "Hershey's", element: 'the wrapper brown', emoji: '🍫', hex: '#7B3F00', tier: 3 },
   { brand: 'UPS', element: 'Pullman brown', emoji: '🚚', hex: '#351C15', tier: 3 },
   { brand: 'Google', element: 'the logo yellow', emoji: '🔎', hex: '#FBBC05', tier: 3 },
-  { brand: 'Olympics', element: 'the top-left ring blue', emoji: '🥇', hex: '#0081C8', tier: 3 },
   { brand: 'Google', element: 'the logo green', emoji: '🔍', hex: '#34A853', tier: 3 },
   { brand: 'Starbucks', element: 'the cup sleeve brown', emoji: '🥤', hex: '#6B4A2C', tier: 3 },
 ];
