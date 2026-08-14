@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Toon Tone Party — brand colour showdown</title>
+<meta name="description" content="Guess famous brand colours from memory, head to head with your friends." />
+<meta name="theme-color" content="#0b0b12" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --bg: #0b0b12;
+    --panel: #16161f;
+    --panel-2: #1e1e2b;
+    --line: #2b2b3d;
+    --text: #f2f2f7;
+    --muted: #9a9ab0;
+    --accent: #ffc72c;
+    --accent-2: #ff4d7d;
+    --good: #3ddc84;
+    --radius: 16px;
+    --pad: 18px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+  body {
+    min-height: 100dvh;
+    background:
+      radial-gradient(1100px 600px at 12% -8%, #251a3a 0%, transparent 60%),
+      radial-gradient(900px 500px at 92% 6%, #10303a 0%, transparent 62%),
+      var(--bg);
+  }
+  .wrap {
+    max-width: 620px; margin: 0 auto;
+    padding: max(18px, env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+  }
+  h1, h2, h3 { margin: 0; line-height: 1.15; letter-spacing: -0.02em; }
+  p { margin: 0; }
+  .stack { display: grid; gap: 14px; }
+  .hide { display: none !important; }
+
+  .brandbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .dots { display: flex; gap: 5px; }
+  .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .wordmark { font-weight: 800; font-size: 17px; letter-spacing: -0.03em; }
+  .wordmark span { color: var(--muted); font-weight: 600; }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--pad);
+  }
+  .muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .tiny { font-size: 12.5px; color: var(--muted); }
+
+  input[type="text"] {
+    width: 100%; padding: 14px 15px; font-size: 16px; font-family: inherit;
+    color: var(--text); background: #0f0f18; border: 1px solid var(--line);
+    border-radius: 12px; outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input.code { text-transform: uppercase; letter-spacing: 0.35em; font-weight: 700; text-align: center; }
+
+  button {
+    font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer;
+    border: 0; border-radius: 12px; padding: 15px 18px; color: #14141c;
+    background: var(--accent); transition: transform .08s ease, opacity .15s ease;
+  }
+  button:active { transform: scale(0.985); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: #23233199; color: var(--text); border: 1px solid var(--line); }
+  button.wide { width: 100%; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+
+  /* ---------- game ---------- */
+  .hud { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .pill {
+    font-size: 12.5px; font-weight: 700; color: var(--muted);
+    background: #ffffff0f; border: 1px solid var(--line);
+    padding: 6px 11px; border-radius: 999px;
+  }
+  .timer { height: 6px; background: #ffffff14; border-radius: 999px; overflow: hidden; margin-bottom: 16px; }
+  .timer i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--good), var(--accent)); border-radius: 999px; }
+  .timer.low i { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+
+  .prompt { text-align: center; padding: 22px 18px; }
+  .prompt .emoji { font-size: 44px; line-height: 1; }
+  .prompt .brandname { font-size: 27px; font-weight: 800; }
+  .prompt .element { color: var(--muted); font-size: 15px; margin-top: 6px; }
+
+  .swatch {
+    height: 122px; border-radius: 14px; border: 1px solid #ffffff22;
+    box-shadow: inset 0 1px 0 #ffffff22, 0 10px 26px #0006;
+  }
+  .swatch.sm { height: 62px; }
+  .swatch.bar { height: 30px; }
+
+  /* Logo stage — the mark re-tints live as the sliders move. */
+  .stage {
+    background: #f7f7f9; border-radius: 14px; border: 1px solid #ffffff22;
+    box-shadow: 0 10px 26px #0006; padding: 16px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 178px;
+  }
+  .stage.sm { min-height: 96px; padding: 10px; border-radius: 12px; }
+  .stage svg.logo { width: 100%; height: 146px; display: block; }
+  .stage.sm svg.logo { height: 74px; }
+
+  .sliders { display: grid; gap: 15px; }
+  .sl-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 7px; }
+  .sl-head b { color: var(--muted); font-weight: 700; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 26px;
+    background: transparent; margin: 0; outline: none;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 26px; border-radius: 9px; border: 1px solid #ffffff26; background: var(--track);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 26px; border-radius: 9px; border: 1px solid #ffffff26; background: var(--track);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 34px; margin-top: -5px; border-radius: 7px;
+    background: #fff; border: 2px solid #14141c; box-shadow: 0 2px 8px #0009;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 34px; border-radius: 7px;
+    background: #fff; border: 2px solid #14141c; box-shadow: 0 2px 8px #0009;
+  }
+
+  .plist { display: grid; gap: 8px; }
+  .prow {
+    display: flex; align-items: center; gap: 11px;
+    padding: 10px 12px; border-radius: 12px; background: #ffffff0a; border: 1px solid var(--line);
+  }
+  .prow .chip { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #ffffff2b; flex: none; }
+  .prow .nm { flex: 1; font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow .sc { font-variant-numeric: tabular-nums; font-weight: 800; }
+  .prow .rank { width: 22px; text-align: center; color: var(--muted); font-weight: 800; font-size: 13px; flex: none; }
+  .prow.me { border-color: #ffc72c66; background: #ffc72c14; }
+  .prow .tag { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+
+  .scorebig { font-size: 46px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .cmp .lab { font-size: 12.5px; color: var(--muted); font-weight: 700; margin-bottom: 7px; text-align: center; }
+
+  .podium { display: grid; gap: 10px; }
+  .pod {
+    display: flex; align-items: center; gap: 12px; padding: 14px;
+    border-radius: 14px; border: 1px solid var(--line); background: #ffffff0a;
+  }
+  .pod.p1 { background: linear-gradient(100deg, #ffc72c26, #ffffff08); border-color: #ffc72c66; }
+  .pod .medal { font-size: 22px; width: 30px; text-align: center; flex: none; }
+  .pod .nm { flex: 1; font-weight: 800; font-size: 17px; }
+  .pod .sc { font-weight: 800; font-size: 19px; font-variant-numeric: tabular-nums; }
+
+  .recap { display: grid; gap: 9px; }
+  .rrow { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 11px; background: #ffffff08; }
+  .rrow .chip { width: 34px; height: 34px; border-radius: 9px; border: 1px solid #ffffff2b; flex: none; }
+  .rrow .nm { flex: 1; font-size: 14px; font-weight: 700; }
+  .rrow .nm small { display: block; color: var(--muted); font-weight: 600; font-size: 12px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(14px);
+    background: #fff; color: #14141c; font-weight: 700; font-size: 14px;
+    padding: 11px 17px; border-radius: 999px; opacity: 0; pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease; z-index: 40; box-shadow: 0 10px 30px #0008;
+  }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .err { color: #ff8fa8; font-size: 14px; font-weight: 600; }
+  .fade { animation: fade .25s ease both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .fade { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brandbar">
+    <span class="dots">
+      <i style="background:#F40009"></i><i style="background:#00704A"></i>
+      <i style="background:#1877F2"></i><i style="background:#FFC72C"></i>
+    </span>
+    <span class="wordmark">Toon Tone <span>Party</span></span>
+  </div>
+
+  <!-- ================= HOME ================= -->
+  <section id="home" class="stack">
+    <div class="card stack">
+      <h1 style="font-size:26px">Guess the brand colour.<br />Beat your friends.</h1>
+      <p class="muted">
+        Each round shows a famous logo, drained of colour. Rebuild that exact shade from
+        memory with the hue, saturation and brightness sliders — the logo repaints itself
+        as you drag. Five rounds, closest wins.
+      </p>
+    </div>
+
+    <div class="card stack">
+      <input id="name" type="text" maxlength="16" placeholder="Your name" autocomplete="nickname" />
+      <button id="btnCreate" class="wide">Create a room</button>
+      <p class="tiny" style="text-align:center">You'll get a code and a link to share.</p>
+    </div>
+
+    <div class="card stack">
+      <p class="muted" style="font-weight:700;color:var(--text)">Joining a friend?</p>
+      <input id="code" class="code" type="text" maxlength="4" placeholder="CODE"
+             autocomplete="off" autocapitalize="characters" spellcheck="false" />
+      <button id="btnJoin" class="ghost wide">Join room</button>
+      <p id="homeErr" class="err hide"></p>
+    </div>
+  </section>
+
+  <!-- ================= LOBBY ================= -->
+  <section id="lobby" class="stack hide">
+    <div class="card" style="text-align:center">
+      <p class="tiny" style="letter-spacing:.14em;text-transform:uppercase">Room code</p>
+      <div id="lobbyCode" style="font-size:50px;font-weight:800;letter-spacing:.16em;margin:6px 0 4px"></div>
+      <p class="muted">Share the code or the link — up to 12 players.</p>
+      <div class="row" style="margin-top:14px">
+        <button id="btnShare" class="ghost">Copy link</button>
+        <button id="btnShareCode" class="ghost">Copy code</button>
+      </div>
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="font-size:16px">Players</h3>
+        <span id="lobbyCount" class="pill">0</span>
+      </div>
+      <div id="lobbyList" class="plist"></div>
+    </div>
+
+    <button id="btnStart" class="wide">Start game</button>
+    <p id="waitHost" class="muted hide" style="text-align:center">Waiting for the host to start…</p>
+    <button id="btnLeave" class="ghost wide">Leave room</button>
+  </section>
+
+  <!-- ================= PLAY ================= -->
+  <section id="play" class="stack hide">
+    <div>
+      <div class="hud">
+        <span class="pill" id="roundPill">Round 1 / 5</span>
+        <span class="pill" id="timePill">45s</span>
+      </div>
+      <div class="timer" id="timerBar"><i></i></div>
+    </div>
+
+    <!-- No emoji here on purpose: a coloured emoji gives the answer away. -->
+    <div class="card prompt">
+      <div class="brandname" id="pBrand">—</div>
+      <div class="element" id="pElement">—</div>
+    </div>
+
+    <div class="card stack">
+      <div class="stage" id="stage"></div>
+      <div class="swatch bar" id="preview"></div>
+      <div class="sliders">
+        <div>
+          <div class="sl-head"><span>Hue</span><b id="vH">0°</b></div>
+          <input id="sH" type="range" min="0" max="359" value="0" />
+        </div>
+        <div>
+          <div class="sl-head"><span>Saturation</span><b id="vS">70%</b></div>
+          <input id="sS" type="range" min="0" max="100" value="70" />
+        </div>
+        <div>
+          <div class="sl-head"><span>Brightness</span><b id="vB">80%</b></div>
+          <input id="sB" type="range" min="0" max="100" value="80" />
+        </div>
+      </div>
+      <button id="btnLock" class="wide">Lock it in</button>
+      <p id="lockedMsg" class="muted hide" style="text-align:center">
+        Locked in — waiting for the others…
+      </p>
+    </div>
+
+    <div class="card stack">
+      <h3 style="font-size:15px">Who's answered</h3>
+      <div id="playList" class="plist"></div>
+    </div>
+  </section>
+
+  <!-- ================= REVEAL ================= -->
+  <section id="reveal" class="stack hide">
+    <div class="hud">
+      <span class="pill" id="revPill">Round 1 / 5</span>
+      <span class="pill" id="revNext">Next round…</span>
+    </div>
+
+    <div class="card stack" style="text-align:center">
+      <div>
+        <span style="font-size:30px" id="rEmoji">🎨</span>
+        <h2 style="font-size:22px;margin-top:6px" id="rBrand">—</h2>
+        <p class="muted" id="rElement">—</p>
+      </div>
+      <div class="cmp">
+        <div>
+          <div class="lab">The real colour</div>
+          <div class="stage sm" id="rTargetLogo"></div>
+          <div class="swatch bar" id="rTarget" style="margin-top:6px"></div>
+          <div class="tiny" id="rTargetHex" style="margin-top:6px"></div>
+        </div>
+        <div>
+          <div class="lab">Your guess</div>
+          <div class="stage sm" id="rMineLogo"></div>
+          <div class="swatch bar" id="rMine" style="margin-top:6px"></div>
+          <div class="tiny" id="rMineHex" style="margin-top:6px"></div>
+        </div>
+      </div>
+      <div>
+        <div class="scorebig" id="rScore">—</div>
+        <p class="tiny" id="rScoreNote">out of 10</p>
+      </div>
+    </div>
+
+    <div class="card stack">
+      <h3 style="font-size:15px">This round</h3>
+      <div id="revealList" class="plist"></div>
+    </div>
+
+    <div class="card stack">
+      <h3 style="font-size:15px">Leaderboard</h3>
+      <div id="revealBoard" class="plist"></div>
+    </div>
+  </section>
+
+  <!-- ================= FINAL ================= -->
+  <section id="final" class="stack hide">
+    <div class="card stack" style="text-align:center">
+      <h2 style="font-size:24px" id="finalTitle">Final scores</h2>
+      <p class="muted" id="finalNote"></p>
+    </div>
+    <div class="podium" id="podium"></div>
+
+    <div class="card stack">
+      <h3 style="font-size:15px">The colours you were chasing</h3>
+      <div class="recap" id="recap"></div>
+    </div>
+
+    <button id="btnAgain" class="wide">Play again</button>
+    <p id="waitAgain" class="muted hide" style="text-align:center">Waiting for the host to start a new game…</p>
+    <button id="btnHome" class="ghost wide">Back to start</button>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/logos.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const API = '/api/game';
+
+  // ---------------------------------------------------------------- colour
+  function hsbToRgb(h, s, b) {
+    const S = s / 100, V = b / 100;
+    const c = V * S, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = V - c;
+    let r = 0, g = 0, bl = 0;
+    if (h < 60) [r, g, bl] = [c, x, 0];
+    else if (h < 120) [r, g, bl] = [x, c, 0];
+    else if (h < 180) [r, g, bl] = [0, c, x];
+    else if (h < 240) [r, g, bl] = [0, x, c];
+    else if (h < 300) [r, g, bl] = [x, 0, c];
+    else [r, g, bl] = [c, 0, x];
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((bl + m) * 255)];
+  }
+  const css = (h, s, b) => { const [r, g, bl] = hsbToRgb(h, s, b); return `rgb(${r},${g},${bl})`; };
+  const hex = (h, s, b) => '#' + hsbToRgb(h, s, b).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+
+  // ---------------------------------------------------------------- misc
+  let toastTimer = null;
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('on'), 1900);
+  }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  async function api(op, extra) {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ op }, extra || {})),
+    });
+    return res.json();
+  }
+
+  const store = {
+    get name() { try { return localStorage.getItem('tt_name') || ''; } catch { return ''; } },
+    set name(v) { try { localStorage.setItem('tt_name', v); } catch {} },
+    pid(code) { try { return localStorage.getItem('tt_pid_' + code) || ''; } catch { return ''; } },
+    setPid(code, pid) { try { localStorage.setItem('tt_pid_' + code, pid); } catch {} },
+  };
+
+  // ---------------------------------------------------------------- state
+  const me = { code: '', pid: '', name: '' };
+  let poll = null;
+  let last = null;        // most recent server state
+  let clockSkew = 0;      // serverNow - clientNow
+  let lockedRoundKey = ''; // gameId:round we've already submitted for
+  let seenPhaseKey = '';
+  let submitting = false;
+
+  function show(id) {
+    for (const s of ['home', 'lobby', 'play', 'reveal', 'final']) {
+      $(s).classList.toggle('hide', s !== id);
+    }
+  }
+
+  // ---------------------------------------------------------------- sliders
+  const sH = $('sH'), sS = $('sS'), sB = $('sB');
+
+  // The prompt currently on the stage, so paint() can re-tint the right mark.
+  let stagePrompt = null;
+  let stageKey = '';
+
+  function drawStage(el, prompt, color, cls) {
+    if (!prompt) return;
+    el.innerHTML = window.ToonLogos.logoSvg(prompt.brand, prompt.element, color, cls);
+  }
+
+  function paint() {
+    const h = +sH.value, s = +sS.value, b = +sB.value;
+    $('vH').textContent = h + '°';
+    $('vS').textContent = s + '%';
+    $('vB').textContent = b + '%';
+    $('preview').style.background = css(h, s, b);
+    if (stagePrompt) drawStage($('stage'), stagePrompt, css(h, s, b));
+
+    const hueStops = [];
+    for (let i = 0; i <= 360; i += 30) hueStops.push(css(i % 360, Math.max(s, 60), Math.max(b, 70)));
+    sH.style.setProperty('--track', `linear-gradient(90deg, ${hueStops.join(',')})`);
+    sS.style.setProperty('--track', `linear-gradient(90deg, ${css(h, 0, b)}, ${css(h, 100, b)})`);
+    sB.style.setProperty('--track', `linear-gradient(90deg, ${css(h, s, 0)}, ${css(h, s, 100)})`);
+  }
+  for (const el of [sH, sS, sB]) el.addEventListener('input', paint);
+  paint();
+
+  // ---------------------------------------------------------------- render
+  function playerRow(p, opts) {
+    const o = opts || {};
+    const mine = p.pid === me.pid;
+    const chip = o.chipFor ? o.chipFor(p) : null;
+    return `<div class="prow ${mine ? 'me' : ''}">
+      ${o.rank ? `<span class="rank">${o.rank}</span>` : ''}
+      ${o.noChip ? ''
+        : chip ? `<span class="chip" style="background:${chip}"></span>`
+               : `<span class="chip" style="background:${p.submitted ? 'var(--good)' : '#ffffff14'}"></span>`}
+      <span class="nm">${esc(p.name)}${mine ? ' <span class="tag">you</span>' : ''}
+        ${p.active === false ? ' <span class="tag">away</span>' : ''}</span>
+      ${o.right ? o.right(p) : ''}
+    </div>`;
+  }
+
+  function renderLobby(st) {
+    $('lobbyCode').textContent = st.code;
+    $('lobbyCount').textContent = st.players.length + (st.players.length === 1 ? ' player' : ' players');
+    $('lobbyList').innerHTML = st.players.map((p) =>
+      playerRow(p, { right: () => (p.pid === st.actingHostId ? '<span class="tag">host</span>' : '') })
+    ).join('');
+    const isHost = st.actingHostId === me.pid;
+    $('btnStart').classList.toggle('hide', !isHost);
+    $('waitHost').classList.toggle('hide', isHost);
+    $('btnStart').disabled = st.players.length < 1;
+  }
+
+  function renderPlay(st) {
+    $('roundPill').textContent = `Round ${st.round} / ${st.totalRounds}`;
+    $('pBrand').textContent = st.prompt.brand;
+    $('pElement').textContent = st.prompt.element;
+
+    const key = st.gameId + ':' + st.round;
+    if (stageKey !== key) {
+      stageKey = key;
+      stagePrompt = st.prompt;
+      paint();
+    }
+    const locked = !!st.mySubmission || lockedRoundKey === key;
+    $('btnLock').classList.toggle('hide', locked);
+    $('lockedMsg').classList.toggle('hide', !locked);
+    for (const el of [sH, sS, sB]) el.disabled = locked;
+
+    $('playList').innerHTML = st.players.map((p) =>
+      playerRow(p, { right: (x) => `<span class="tag">${x.submitted ? 'locked in' : 'thinking…'}</span>` })
+    ).join('');
+  }
+
+  function renderReveal(st) {
+    $('revPill').textContent = `Round ${st.round} / ${st.totalRounds}`;
+    $('rEmoji').textContent = st.prompt.emoji;
+    $('rBrand').textContent = st.prompt.brand;
+    $('rElement').textContent = st.prompt.element;
+
+    const t = st.target;
+    $('rTarget').style.background = css(t.h, t.s, t.b);
+    drawStage($('rTargetLogo'), st.prompt, css(t.h, t.s, t.b));
+    $('rTargetHex').innerHTML = `${t.hex}<br />H${t.h} · S${t.s} · B${t.b}`;
+
+    const mine = st.players.find((p) => p.pid === me.pid);
+    if (mine && mine.guess) {
+      $('rMine').style.background = css(mine.guess.h, mine.guess.s, mine.guess.b);
+      drawStage($('rMineLogo'), st.prompt, css(mine.guess.h, mine.guess.s, mine.guess.b));
+      $('rMineHex').innerHTML =
+        `${hex(mine.guess.h, mine.guess.s, mine.guess.b)}<br />H${mine.guess.h} · S${mine.guess.s} · B${mine.guess.b}`;
+      $('rScore').textContent = mine.score.toFixed(2);
+      $('rScoreNote').textContent = mine.score >= 9 ? 'out of 10 — outstanding' :
+        mine.score >= 7.5 ? 'out of 10 — very close' :
+        mine.score >= 5 ? 'out of 10 — not bad' : 'out of 10 — ouch';
+    } else {
+      $('rMine').style.background = '#ffffff10';
+      $('rMineLogo').innerHTML = '<span class="tiny" style="color:#8b8b95">no guess</span>';
+      $('rMineHex').textContent = 'no guess';
+      $('rScore').textContent = '—';
+      $('rScoreNote').textContent = 'you missed this round';
+    }
+
+    const ranked = st.players.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+    $('revealList').innerHTML = ranked.map((p) =>
+      playerRow(p, {
+        chipFor: (x) => (x.guess ? css(x.guess.h, x.guess.s, x.guess.b) : '#ffffff14'),
+        right: (x) => `<span class="sc">${x.score != null ? x.score.toFixed(2) : '—'}</span>`,
+      })
+    ).join('');
+
+    const board = st.players.slice().sort((a, b) => b.total - a.total);
+    $('revealBoard').innerHTML = board.map((p, i) =>
+      playerRow(p, { rank: i + 1, noChip: true, right: (x) => `<span class="sc">${x.total.toFixed(2)}</span>` })
+    ).join('');
+  }
+
+  function renderFinal(st) {
+    const board = st.players.slice().sort((a, b) => b.total - a.total);
+    const top = board[0];
+    const mine = board.find((p) => p.pid === me.pid);
+    const iWon = top && mine && top.pid === mine.pid && board.length > 1;
+    $('finalTitle').textContent = iWon ? 'You win! 🏆' : 'Final scores';
+    $('finalNote').textContent = top
+      ? `${top.name} took it with ${top.total.toFixed(2)} out of ${(st.totalRounds * 10).toFixed(0)}.`
+      : '';
+
+    const medals = ['🥇', '🥈', '🥉'];
+    $('podium').innerHTML = board.map((p, i) => `
+      <div class="pod ${i === 0 ? 'p1' : ''}">
+        <span class="medal">${medals[i] || i + 1}</span>
+        <span class="nm">${esc(p.name)}${p.pid === me.pid ? ' <span class="tag">you</span>' : ''}</span>
+        <span class="sc">${p.total.toFixed(2)}</span>
+      </div>`).join('');
+
+    const nameOf = {};
+    for (const p of st.players) nameOf[p.pid] = p.name;
+    $('recap').innerHTML = (st.recap || []).map((r) => {
+      const best = (r.results || []).slice().sort((a, b) => b.score - a.score)[0];
+      return `<div class="rrow">
+        <span class="chip" style="background:${css(r.target.h, r.target.s, r.target.b)}"></span>
+        <span class="nm">${r.emoji} ${esc(r.brand)}
+          <small>${esc(r.element)} · ${r.hex}</small></span>
+        <span class="tiny" style="text-align:right">${best ? esc(nameOf[best.pid] || '?') + '<br>' + best.score.toFixed(2) : '—'}</span>
+      </div>`;
+    }).join('');
+
+    const isHost = st.actingHostId === me.pid;
+    $('btnAgain').classList.toggle('hide', !isHost);
+    $('waitAgain').classList.toggle('hide', isHost);
+  }
+
+  // ---------------------------------------------------------------- timer
+  function tickTimer() {
+    if (!last || !last.endsAt) return;
+    const left = Math.max(0, last.endsAt - (Date.now() + clockSkew));
+    if (last.phase === 'guess') {
+      const pct = Math.max(0, Math.min(1, left / (last.guessMs || 45000)));
+      $('timePill').textContent = Math.ceil(left / 1000) + 's';
+      $('timerBar').querySelector('i').style.width = (pct * 100).toFixed(1) + '%';
+      $('timerBar').classList.toggle('low', pct < 0.28);
+    } else if (last.phase === 'reveal') {
+      const secs = Math.ceil(left / 1000);
+      $('revNext').textContent = last.round >= last.totalRounds
+        ? `Results in ${secs}s` : `Next round in ${secs}s`;
+    }
+  }
+  setInterval(tickTimer, 200);
+
+  // ---------------------------------------------------------------- poll
+  function applyState(st) {
+    if (st.error) {
+      if (st.error === 'no_room') {
+        stopPoll();
+        goHome('That room has expired. Start a new one.');
+      }
+      return;
+    }
+    clockSkew = st.now - Date.now();
+    last = st;
+
+    const phaseKey = `${st.status}:${st.phase}:${st.gameId}:${st.round}`;
+    const changed = phaseKey !== seenPhaseKey;
+    seenPhaseKey = phaseKey;
+
+    if (st.status === 'lobby') {
+      show('lobby');
+      renderLobby(st);
+    } else if (st.status === 'playing' && st.phase === 'guess') {
+      if (changed) {
+        lockedRoundKey = '';
+        for (const el of [sH, sS, sB]) el.disabled = false;
+        $('play').classList.add('fade');
+        setTimeout(() => $('play').classList.remove('fade'), 300);
+      }
+      show('play');
+      renderPlay(st);
+    } else if (st.status === 'playing' && st.phase === 'reveal') {
+      show('reveal');
+      renderReveal(st);
+    } else if (st.status === 'ended') {
+      show('final');
+      renderFinal(st);
+    }
+    tickTimer();
+  }
+
+  async function pollOnce() {
+    if (!me.code || !me.pid) return;
+    try {
+      const st = await api('state', { code: me.code, pid: me.pid });
+      applyState(st);
+    } catch {
+      /* transient network hiccup — the next tick retries */
+    }
+  }
+  function startPoll() {
+    stopPoll();
+    pollOnce();
+    poll = setInterval(pollOnce, 1300);
+  }
+  function stopPoll() { if (poll) clearInterval(poll); poll = null; }
+
+  function goHome(msg) {
+    stopPoll();
+    me.code = ''; me.pid = ''; last = null; seenPhaseKey = ''; lockedRoundKey = '';
+    history.replaceState(null, '', location.pathname);
+    show('home');
+    if (msg) {
+      $('homeErr').textContent = msg;
+      $('homeErr').classList.remove('hide');
+    }
+  }
+
+  function enterRoom(code, pid, name) {
+    me.code = code; me.pid = pid; me.name = name;
+    store.setPid(code, pid);
+    store.name = name;
+    $('homeErr').classList.add('hide');
+    history.replaceState(null, '', location.pathname + '?r=' + code);
+    startPoll();
+  }
+
+  // ---------------------------------------------------------------- actions
+  function nameValue() {
+    const v = $('name').value.trim();
+    return v || 'Player ' + Math.floor(Math.random() * 90 + 10);
+  }
+
+  $('btnCreate').addEventListener('click', async () => {
+    $('btnCreate').disabled = true;
+    try {
+      const r = await api('create', { name: nameValue() });
+      if (r.error) throw new Error(r.error);
+      enterRoom(r.code, r.pid, r.name);
+    } catch (e) {
+      $('homeErr').textContent = String(e && e.message) === 'not_configured'
+        ? 'The game database isn’t connected yet. Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in the Vercel project settings, then redeploy.'
+        : "Couldn't create a room. Try again in a moment.";
+      $('homeErr').classList.remove('hide');
+    } finally {
+      $('btnCreate').disabled = false;
+    }
+  });
+
+  async function join(code) {
+    code = String(code || '').trim().toUpperCase();
+    if (code.length < 4) {
+      $('homeErr').textContent = 'Room codes are 4 characters.';
+      $('homeErr').classList.remove('hide');
+      return;
+    }
+    $('btnJoin').disabled = true;
+    try {
+      const r = await api('join', { code, name: nameValue(), pid: store.pid(code) });
+      if (r.error) {
+        $('homeErr').textContent =
+          r.error === 'full' ? 'That room is full (12 players max).' :
+          r.error === 'no_room' ? "No room with that code — check it, or it may have expired." :
+          'Something went wrong. Try again.';
+        $('homeErr').classList.remove('hide');
+        return;
+      }
+      enterRoom(r.code, r.pid, r.name);
+    } catch {
+      $('homeErr').textContent = 'Network trouble. Try again.';
+      $('homeErr').classList.remove('hide');
+    } finally {
+      $('btnJoin').disabled = false;
+    }
+  }
+  $('btnJoin').addEventListener('click', () => join($('code').value));
+  $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') join($('code').value); });
+  $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnCreate').click(); });
+
+  $('btnStart').addEventListener('click', async () => {
+    $('btnStart').disabled = true;
+    await api('start', { code: me.code, pid: me.pid });
+    await pollOnce();
+    $('btnStart').disabled = false;
+  });
+
+  $('btnAgain').addEventListener('click', async () => {
+    $('btnAgain').disabled = true;
+    await api('again', { code: me.code, pid: me.pid });
+    await pollOnce();
+    $('btnAgain').disabled = false;
+  });
+
+  $('btnLock').addEventListener('click', async () => {
+    if (submitting || !last || last.phase !== 'guess') return;
+    submitting = true;
+    $('btnLock').disabled = true;
+    const guess = { h: +sH.value, s: +sS.value, b: +sB.value };
+    try {
+      const r = await api('submit', { code: me.code, pid: me.pid, ...guess });
+      if (r.error === 'too_late') toast("Time's up on that one!");
+      else lockedRoundKey = last.gameId + ':' + last.round;
+      await pollOnce();
+    } catch {
+      toast('Network hiccup — try once more.');
+    } finally {
+      submitting = false;
+      $('btnLock').disabled = false;
+    }
+  });
+
+  async function copy(text, label) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(label + ' copied');
+    } catch {
+      toast(text);
+    }
+  }
+  $('btnShare').addEventListener('click', async () => {
+    const url = location.origin + location.pathname + '?r=' + me.code;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Toon Tone Party', text: `Join my colour showdown — room ${me.code}`, url });
+        return;
+      } catch { /* user dismissed the share sheet */ }
+    }
+    copy(url, 'Link');
+  });
+  $('btnShareCode').addEventListener('click', () => copy(me.code, 'Code'));
+  $('btnLeave').addEventListener('click', () => goHome());
+  $('btnHome').addEventListener('click', () => goHome());
+
+  // ---------------------------------------------------------------- boot
+  $('name').value = store.name;
+  const fromUrl = new URLSearchParams(location.search).get('r');
+  if (fromUrl) {
+    const code = fromUrl.trim().toUpperCase().slice(0, 4);
+    $('code').value = code;
+    const known = store.pid(code);
+    if (known && store.name) join(code);
+    else toast('Enter your name, then tap Join');
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && me.code) pollOnce();
+  });
+})();
+</script>
+</body>
+</html>
