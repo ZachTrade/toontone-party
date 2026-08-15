@@ -137,6 +137,7 @@
   }
 
   .tabs { display: flex; gap: 6px; }
+  .tabs.nav button { flex: 1; padding: 11px 8px; font-size: 13.5px; }
   .tabs button {
     padding: 7px 13px; font-size: 13px; font-weight: 700; border-radius: 999px;
     background: #ffffff0f; color: var(--muted); border: 1px solid var(--line);
@@ -200,12 +201,10 @@
 
   <!-- ================= HOME ================= -->
   <section id="home" class="stack">
-    <div class="card stack">
-      <h1 style="font-size:26px">Guess the brand colour.<br />Beat your friends.</h1>
+    <div class="card stack" id="heroCard">
+      <h1 style="font-size:23px">Guess the brand colour.</h1>
       <p class="muted">
-        Every round shows a famous logo, drained of colour. Rebuild that exact shade from
-        memory with the hue, saturation and brightness sliders — the logo repaints itself
-        as you drag. Play today's three, or start a room and race your friends.
+        Rebuild a famous logo's exact shade from memory — it repaints itself as you drag.
       </p>
     </div>
 
@@ -234,58 +233,79 @@
       </div>
     </div>
 
-    <div class="card stack">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <p class="muted" style="font-weight:700;color:var(--text)">Daily challenge</p>
-        <span id="homeDay" class="pill">—</span>
-      </div>
-      <p class="tiny">
-        Three logos a day, the same three for everybody. One shot each and your
-        scores add up — 30 is perfect.
-      </p>
-      <button id="btnDaily" class="wide">Play today's logos</button>
+    <div class="tabs nav">
+      <button id="tabDaily" class="on">Daily challenge</button>
+      <button id="tabPvp">PVP</button>
+      <button id="tabBoard">Leaderboard</button>
     </div>
 
-    <div class="card stack">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <div class="tabs">
-          <button id="tabToday" class="on">Today</button>
-          <button id="tabAllTime">All-time</button>
+    <!-- ---------- daily ---------- -->
+    <div id="secDaily" class="stack">
+      <div class="card stack">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <p class="muted" style="font-weight:700;color:var(--text)">Daily challenge</p>
+          <span id="homeDay" class="pill">—</span>
         </div>
-        <span id="homeRank" class="pill">—</span>
-      </div>
-
-      <div id="paneToday" class="stack">
-        <div id="homeBoard" class="plist"></div>
-        <p id="homeBoardEmpty" class="tiny hide" style="text-align:center">
-          Nobody's played today yet. Be first.
+        <p class="tiny">
+          Three logos a day, the same three for everybody. One shot each and your
+          scores add up — 30 is perfect.
         </p>
-        <p id="homeBoardMore" class="tiny hide" style="text-align:center"></p>
-      </div>
-
-      <div id="paneAllTime" class="stack hide">
-        <div id="careerBoard" class="plist"></div>
-        <p id="careerEmpty" class="tiny hide" style="text-align:center">
-          No finished games yet. Play a room with a friend to get on the board.
-        </p>
-        <p class="tiny" style="text-align:center">
-          Room games only. Win an N-player room for N points and a 🥇; last place still
-          takes 1.
-        </p>
+        <button id="btnDaily" class="wide">Play today's logos</button>
+        <p id="dailyStanding" class="tiny hide" style="text-align:center"></p>
       </div>
     </div>
 
-    <div class="card stack">
-      <button id="btnCreate" class="wide">Create a room</button>
-      <p class="tiny" style="text-align:center">You'll get a code and a link to share.</p>
+    <!-- ---------- pvp ---------- -->
+    <div id="secPvp" class="stack hide">
+      <div class="card stack">
+        <p class="muted" style="font-weight:700;color:var(--text)">Start a game</p>
+        <p class="tiny">
+          Five rounds against your friends in the same room. Winning banks points and a
+          gold medal on the leaderboard.
+        </p>
+        <button id="btnCreate" class="wide">Create a room</button>
+        <p class="tiny" style="text-align:center">You'll get a code and a link to share.</p>
+      </div>
+
+      <div class="card stack">
+        <p class="muted" style="font-weight:700;color:var(--text)">Joining a friend?</p>
+        <input id="code" class="code" type="text" maxlength="4" placeholder="CODE"
+               autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        <button id="btnJoin" class="ghost wide">Join room</button>
+      </div>
+      <p id="homeErr" class="err hide" style="text-align:center"></p>
     </div>
 
-    <div class="card stack">
-      <p class="muted" style="font-weight:700;color:var(--text)">Joining a friend?</p>
-      <input id="code" class="code" type="text" maxlength="4" placeholder="CODE"
-             autocomplete="off" autocapitalize="characters" spellcheck="false" />
-      <button id="btnJoin" class="ghost wide">Join room</button>
-      <p id="homeErr" class="err hide"></p>
+    <!-- ---------- leaderboard ---------- -->
+    <div id="secBoard" class="stack hide">
+      <div class="card stack">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div class="tabs">
+            <button id="tabToday" class="on">Today</button>
+            <button id="tabAllTime">All-time</button>
+          </div>
+          <span id="homeRank" class="pill">—</span>
+        </div>
+
+        <div id="paneToday" class="stack">
+          <div id="homeBoard" class="plist"></div>
+          <p id="homeBoardEmpty" class="tiny hide" style="text-align:center">
+            Nobody's played today yet. Be first.
+          </p>
+          <p id="homeBoardMore" class="tiny hide" style="text-align:center"></p>
+        </div>
+
+        <div id="paneAllTime" class="stack hide">
+          <div id="careerBoard" class="plist"></div>
+          <p id="careerEmpty" class="tiny hide" style="text-align:center">
+            No finished games yet. Play a room with a friend to get on the board.
+          </p>
+          <p class="tiny" style="text-align:center">
+            Room games only. Win an N-player room for N points and a 🥇; last place still
+            takes 1.
+          </p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -886,6 +906,7 @@
       and whether the things that need a name are usable yet. */
   function renderIdentity() {
     const signedIn = !!store.token && !!store.name;
+    $('heroCard').classList.toggle('hide', signedIn);
     $('idCard').classList.toggle('hide', signedIn);
     $('idWho').classList.toggle('hide', !signedIn);
     $('idWhoName').textContent = store.name;
@@ -1174,7 +1195,7 @@
           ? `Continue — logo ${st.index + 1} of ${st.total}`
           : "Play today's logos";
 
-    if (homeTab === 'today') {
+    if (boardTab === 'today') {
       $('homeRank').textContent = st.myRank
         ? `You're #${st.myRank}`
         : st.players === 1 ? '1 player' : `${st.players} players`;
@@ -1193,6 +1214,15 @@
     const rest = st.players - top.length;
     $('homeBoardMore').textContent = rest > 0 ? `+ ${rest} more` : '';
     $('homeBoardMore').classList.toggle('hide', rest <= 0);
+
+    // The board lives on its own tab now, so the daily tab carries just enough
+    // to be worth glancing at.
+    $('dailyStanding').textContent = st.myRank
+      ? `You're #${st.myRank} of ${st.players} today`
+      : st.players > 0
+        ? `${st.players} ${st.players === 1 ? 'person has' : 'people have'} played today`
+        : '';
+    $('dailyStanding').classList.toggle('hide', !$('dailyStanding').textContent);
   }
 
   /** Both boards change after a game, so they refresh together. */
@@ -1210,8 +1240,26 @@
     }
   }
 
+  // ---- home tabs ----
+  // Kept for the session, so coming back from a game lands where you left off.
+  let homeSection = 'daily';
+  const SECTIONS = { daily: 'tabDaily', pvp: 'tabPvp', board: 'tabBoard' };
+
+  function showSection(which) {
+    homeSection = which;
+    for (const [name, tab] of Object.entries(SECTIONS)) {
+      $(tab).classList.toggle('on', name === which);
+      $('sec' + name[0].toUpperCase() + name.slice(1)).classList.toggle('hide', name !== which);
+    }
+    if (which === 'board') refreshHome();
+  }
+
+  for (const [name, tab] of Object.entries(SECTIONS)) {
+    $(tab).addEventListener('click', () => showSection(name));
+  }
+
   // ---- all-time board: wins, points and medals across finished room games ----
-  let homeTab = 'today';
+  let boardTab = 'today';
   let careerCache = null;
 
   function renderCareer(st) {
@@ -1225,7 +1273,7 @@
         <span class="sc">${r.points}</span>
       </div>`).join('');
     $('careerEmpty').classList.toggle('hide', st.players > 0);
-    if (homeTab === 'alltime') {
+    if (boardTab === 'alltime') {
       $('homeRank').textContent = st.myRank
         ? `You're #${st.myRank}`
         : st.players === 1 ? '1 player' : `${st.players} players`;
@@ -1239,8 +1287,8 @@
     } catch { /* the rest of the home screen still works */ }
   }
 
-  function showTab(which) {
-    homeTab = which;
+  function showBoardTab(which) {
+    boardTab = which;
     $('tabToday').classList.toggle('on', which === 'today');
     $('tabAllTime').classList.toggle('on', which === 'alltime');
     $('paneToday').classList.toggle('hide', which !== 'today');
@@ -1253,8 +1301,8 @@
     }
   }
 
-  $('tabToday').addEventListener('click', () => showTab('today'));
-  $('tabAllTime').addEventListener('click', () => showTab('alltime'));
+  $('tabToday').addEventListener('click', () => showBoardTab('today'));
+  $('tabAllTime').addEventListener('click', () => showBoardTab('alltime'));
 
   $('btnDaily').addEventListener('click', openDaily);
 

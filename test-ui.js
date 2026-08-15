@@ -47,17 +47,25 @@ async function main() {
   await host.goto(BASE);
   await host.waitForTimeout(400);
   check('home screen visible', await visible(host, '#home'));
-  // The daily challenge leads the home screen, with its board under it.
-  const homeOrder = await host.evaluate(() =>
-    ['btnDaily', 'homeBoard', 'btnCreate', 'btnJoin'].map((id) => {
-      const el = document.getElementById(id);
-      return el ? el.getBoundingClientRect().top : -1;
-    }));
-  check('daily challenge sits above create room', homeOrder[0] < homeOrder[2], homeOrder.join(' '));
-  check('daily board sits between them',
-    homeOrder[1] > homeOrder[0] && homeOrder[1] < homeOrder[2], homeOrder.join(' '));
+  // Home is three tabs, not one long scroll.
+  check('home has the three tabs',
+    (await visible(host, '#tabDaily')) && (await visible(host, '#tabPvp')) && (await visible(host, '#tabBoard')));
+  check('the daily tab is the one you land on',
+    (await visible(host, '#secDaily')) &&
+    !(await visible(host, '#secPvp')) && !(await visible(host, '#secBoard')));
   check('home shows the daily date', /^\d{4}-\d{2}-\d{2}$/.test((await host.textContent('#homeDay')).trim()),
     (await host.textContent('#homeDay')).trim());
+
+  await host.click('#tabPvp');
+  await host.waitForTimeout(200);
+  check('the pvp tab swaps the panes',
+    (await visible(host, '#secPvp')) && !(await visible(host, '#secDaily')));
+  await host.click('#tabBoard');
+  await host.waitForTimeout(400);
+  check('the leaderboard tab swaps the panes',
+    (await visible(host, '#secBoard')) && !(await visible(host, '#secPvp')));
+  await host.click('#tabDaily');
+  await host.waitForTimeout(200);
   await host.screenshot({ path: `${SHOTS}/1-home.png`, fullPage: true });
 
   // ---- identity ----
@@ -104,6 +112,8 @@ async function main() {
     !(await visible(host, '#idCard')) && (await host.textContent('#idWhoName')).trim() === 'Zach');
 
   // ---- create room ----
+  await host.click('#tabPvp');
+  await host.waitForTimeout(200);
   await host.click('#btnCreate');
   await host.waitForSelector('#lobby:not(.hide)', { timeout: 10000 });
   const code = (await host.textContent('#lobbyCode')).trim();
@@ -113,6 +123,8 @@ async function main() {
   await guest.goto(`${BASE}/?r=${code}`);
   await guest.waitForTimeout(300);
   await signIn(guest, 'Mia', '4321');
+  await guest.click('#tabPvp');
+  await guest.waitForTimeout(200);
   await guest.click('#btnJoin');
   await guest.waitForSelector('#lobby:not(.hide)', { timeout: 10000 });
 
@@ -221,11 +233,15 @@ async function main() {
   const spectator = await mk('spectator');
   await spectator.goto(BASE);
   await spectator.waitForTimeout(600);
-  check('the leaderboard has both tabs',
+  await spectator.click('#tabBoard');
+  await spectator.waitForTimeout(400);
+  check('the leaderboard has both sub-tabs',
     (await visible(spectator, '#tabToday')) && (await visible(spectator, '#tabAllTime')));
-  check('today is the tab you land on',
+  check('today is the sub-tab you land on',
     (await visible(spectator, '#paneToday')) && !(await visible(spectator, '#paneAllTime')));
 
+  await spectator.click('#tabBoard');
+  await spectator.waitForTimeout(400);
   await spectator.click('#tabAllTime');
   await spectator.waitForTimeout(900);
   check('the all-time tab opens',
@@ -372,6 +388,7 @@ async function main() {
   // Back on the home screen, the same standings should be waiting.
   await rival.click('#btnDailyHome');
   await rival.waitForSelector('#home:not(.hide)', { timeout: 10000 });
+  await rival.click('#tabBoard');
   await rival.waitForTimeout(900);
   check('home board fills in after playing',
     (await rival.locator('#homeBoard .prow').count()) === 2,
