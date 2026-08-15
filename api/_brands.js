@@ -35,13 +35,19 @@ const BRANDS = [
   { brand: 'AirAsia', element: 'the logo red', emoji: '✈️', hex: '#FF0000', tier: 1 },
   { brand: 'Grab', element: 'the logo green', emoji: '🚗', hex: '#00B14F', tier: 1 },
   { brand: 'Shopee', element: 'the shopping bag orange', emoji: '🛍️', hex: '#EE4D2D', tier: 1 },
+  // UNVERIFIED: this yellow is an estimate, not read off Maybank's brand
+  // guidelines — worth confirming, since the round is scored against it.
+  { brand: 'Maybank', element: 'the tiger yellow', emoji: '🏦', hex: '#FFC61E', tier: 1 },
 
   // ---- tier 2 ----
   { brand: 'Pepsi', element: 'the logo blue', emoji: '🥤', hex: '#004B93', tier: 2 },
   { brand: 'Burger King', element: 'the logo red', emoji: '🍔', hex: '#D62300', tier: 2 },
   { brand: 'KFC', element: 'the bucket red', emoji: '🍗', hex: '#E4002B', tier: 2 },
   { brand: 'Taco Bell', element: 'the logo purple', emoji: '🌮', hex: '#702082', tier: 2 },
+  { brand: 'Subway', element: 'the logo green', emoji: '🥪', hex: '#009A44', tier: 2 },
+  { brand: "Domino's", element: 'the logo blue', emoji: '🍕', hex: '#006491', tier: 2 },
   { brand: 'Walmart', element: 'the logo blue', emoji: '🛒', hex: '#0071CE', tier: 2 },
+  { brand: 'Best Buy', element: 'the price tag yellow', emoji: '🔌', hex: '#FFF200', tier: 2 },
   { brand: 'FedEx', element: 'the logo purple', emoji: '📦', hex: '#4D148C', tier: 2 },
   { brand: 'DHL', element: 'the logo yellow', emoji: '✈️', hex: '#FFCC00', tier: 2 },
   { brand: 'Visa', element: 'the logo blue', emoji: '💳', hex: '#1A1F71', tier: 2 },
@@ -58,6 +64,8 @@ const BRANDS = [
   { brand: 'Tesla', element: 'the logo red', emoji: '⚡', hex: '#E82127', tier: 2 },
   { brand: 'Volkswagen', element: 'the logo blue', emoji: '🚐', hex: '#001E50', tier: 2 },
   { brand: 'Red Bull', element: 'the logo blue', emoji: '🐂', hex: '#001489', tier: 2 },
+  { brand: 'Heineken', element: 'the bottle green', emoji: '🍺', hex: '#00843D', tier: 2 },
+  { brand: 'Monster Energy', element: 'the claw green', emoji: '🥤', hex: '#84C226', tier: 2 },
   { brand: 'PlayStation', element: 'the logo blue', emoji: '🎮', hex: '#003791', tier: 2 },
   { brand: 'Hermès', element: 'the box orange', emoji: '👜', hex: '#F37021', tier: 2 },
   { brand: 'HSBC', element: 'the hexagon red', emoji: '🏦', hex: '#DB0011', tier: 2 },
@@ -69,6 +77,7 @@ const BRANDS = [
   { brand: 'NBA', element: 'the logo blue', emoji: '🏀', hex: '#1D428A', tier: 2 },
   { brand: 'Hulu', element: 'the logo green', emoji: '📺', hex: '#1CE783', tier: 2 },
   { brand: 'Prime Video', element: 'the logo blue', emoji: '📺', hex: '#00A8E1', tier: 2 },
+  { brand: 'Disney+', element: 'the logo blue', emoji: '🏰', hex: '#0063E5', tier: 2 },
   { brand: 'Zoom', element: 'the logo blue', emoji: '💻', hex: '#0B5CFF', tier: 2 },
   { brand: 'Telegram', element: 'the paper plane blue', emoji: '✈️', hex: '#24A1DE', tier: 2 },
   { brand: 'Adobe', element: 'the logo red', emoji: '🅰️', hex: '#FA0F00', tier: 2 },
@@ -90,11 +99,14 @@ const BRANDS = [
 
   // ---- tier 2, big in Malaysia ----
   { brand: 'foodpanda', element: 'the logo pink', emoji: '🍜', hex: '#D70F64', tier: 2 },
+  // UNVERIFIED: as with Maybank above, this green is an estimate.
+  { brand: 'Maxis', element: 'the logo green', emoji: '📶', hex: '#00A650', tier: 2 },
 
   // ---- tier 3: subtle, dark, pale or commonly misremembered ----
   { brand: 'Nike', element: 'the Volt shoe colour', emoji: '👟', hex: '#CEFF00', tier: 3 },
   { brand: 'Apple', element: 'the Space Grey finish', emoji: '🍎', hex: '#86868B', tier: 3 },
   { brand: 'Mercedes-Benz', element: 'the star silver', emoji: '🚘', hex: '#A4AAAE', tier: 3 },
+  { brand: "Hershey's", element: 'the wrapper brown', emoji: '🍫', hex: '#7B3F00', tier: 3 },
   { brand: 'UPS', element: 'Pullman brown', emoji: '🚚', hex: '#351C15', tier: 3 },
   { brand: 'Google', element: 'the logo yellow', emoji: '🔎', hex: '#FBBC05', tier: 3 },
   { brand: 'Google', element: 'the logo green', emoji: '🔍', hex: '#34A853', tier: 3 },

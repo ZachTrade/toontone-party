@@ -61,7 +61,7 @@ meaningless, so for those it neither carries weight nor scales anything. See
 | Path | What it is |
 | --- | --- |
 | `index.html` | The whole client — every screen, the sliders, the timer, polling |
-| `logos.js` | 82 real brand marks as re-tintable inline SVG (see below) |
+| `logos.js` | 91 real brand marks as re-tintable inline SVG (see below) |
 | `api/game.js` | The one API endpoint; `op` selects create / join / start / submit / state |
 | `api/_lib.js` | Redis client, colour maths, scoring, round building |
 | `api/_brands.js` | The brand list with official colours and difficulty tiers |
@@ -74,21 +74,30 @@ the whole thing inside Vercel's serverless model with no persistent connections.
 
 ### About the logos
 
-Every one of the 82 marks in `logos.js` is the brand's **actual logo** — an exact vector
-outline on a 24×24 grid, stored as a single path so the whole shape re-tints as one
-piece when the sliders move. The token `CURRENT` is swapped for the player's colour at
-render time, and nothing in a mark is a fixed colour.
+Every one of the 91 marks in `logos.js` is the brand's **actual logo** — exact vector
+outlines, flattened so the whole mark re-tints as one piece when the sliders move. The
+token `CURRENT` is swapped for the player's colour at render time, and nothing in a mark
+keeps a colour of its own.
 
 There are no approximations and no part-tinted marks: **a brand either has real artwork
 or it isn't in the game.** `npm test` fails if a row in `api/_brands.js` has no mark, so
 the two files can't drift apart.
 
-The outlines come from [simple-icons](https://github.com/simple-icons/simple-icons)
-(CC0-1.0), inlined at build time so the game ships no runtime dependency. Newer releases
-of that project have dropped a number of consumer brands, so the generator falls back
-through older releases to fill them in — 67 marks come from 16.x, the remaining 15 from
-13.x, 11.x and 9.x. The logos themselves remain trademarks of their respective owners;
-the game names each brand out loud and uses its mark to ask you about that brand.
+Artwork comes from two places, inlined so the game ships no runtime dependency:
+
+- [simple-icons](https://github.com/simple-icons/simple-icons) (CC0-1.0) for 82 of them.
+  Newer releases have dropped a number of consumer brands, so 67 marks come from 16.x and
+  the remaining 15 from 13.x, 11.x and 9.x.
+- [theSVG](https://thesvg.org) (MIT) for the rest — brands simple-icons has never
+  carried, found by searching all 241 Iconify collections.
+
+The logos themselves remain trademarks of their respective owners; the game names each
+brand out loud and uses its mark to ask you about that brand.
+
+Not every logo survives being flattened to one colour. A mark whose identity is a white
+wordmark on a solid field — LEGO, The Home Depot, Fanta, Costco — becomes a plain
+rectangle once the whole shape takes a single colour, so those stay out until a version
+turns up with the lettering cut out of the shape rather than painted on top.
 
 A mark is either a bare path string — one outline on the 24×24 grid, which is how every
 simple-icons mark arrives — or a `[viewBox, markup]` pair for artwork that needs several
@@ -97,9 +106,10 @@ use.
 
 ### Adding a brand simple-icons doesn't carry
 
-simple-icons covers 82 brands here and has never carried the rest — LEGO, Oreo, Costco,
-Petronas, Maybank, Touch 'n Go and 30-odd others. `tools/wanted.js` is the standing list
-of what's missing, with the colour and tier each one needs.
+simple-icons covers 82 brands here and has never carried the rest. `tools/wanted.js` is
+the standing list of what's still missing — Barbie, Oreo, Rolex, Petronas, Touch 'n Go
+and two dozen others — with the colour and tier each one needs, and a note on the four
+whose artwork exists but doesn't survive flattening.
 
 Drop the logo into `tools/logos-src/<Brand Name>.svg` and run:
 
