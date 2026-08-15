@@ -237,6 +237,32 @@ async function main() {
     (await spectator.locator('#secDaily #homeBoard').count()) === 1 &&
     (await visible(spectator, '#dailyRank')));
 
+  // Everyone is listed, not just a top few. Seed enough players to prove the
+  // board isn't being truncated at five.
+  const crowd = [];
+  for (let i = 1; i <= 7; i++) {
+    const p = await mk(`crowd${i}`);
+    await p.goto(BASE);
+    await p.waitForTimeout(200);
+    await signIn(p, `Crowd${i}`, '1111');
+    await p.click('#btnDaily');
+    await p.waitForSelector('#daily:not(.hide)', { timeout: 10000 });
+    for (let logo = 0; logo < 3; logo++) {
+      await p.locator('#dH').fill(String(20 + i * 10 + logo * 5));
+      await p.click('#btnDailyLock');
+      await p.waitForSelector('#dResult:not(.hide)', { timeout: 10000 });
+      await p.click('#btnDailyNext');
+      await p.waitForTimeout(150);
+    }
+    crowd.push(p);
+  }
+  await spectator.reload();
+  await spectator.waitForTimeout(1200);
+  const crowdRows = await spectator.locator('#secDaily #homeBoard .prow').count();
+  check('the daily board lists everyone, not a top five', crowdRows >= 7, String(crowdRows));
+  await spectator.screenshot({ path: `${SHOTS}/11-full-board.png`, fullPage: true });
+  for (const p of crowd) await p.close();
+
   await spectator.click('#tabBoard');
   await spectator.waitForTimeout(900);
   check('the leaderboard tab has both sub-tabs',
@@ -382,8 +408,10 @@ async function main() {
     await rival.click('#btnDailyNext');
     await rival.waitForTimeout(300);
   }
+  // Everyone who played today is on it, so assert sharing by name below rather
+  // than by an exact row count.
   const rows = await rival.locator('#dBoard .prow').count();
-  check('the board is shared between players', rows === 2, String(rows));
+  check('the board is shared between players', rows >= 2, String(rows));
   const names = (await rival.locator('#dBoard .nm').allTextContents()).join(' ');
   check('both players are listed', /Sam/.test(names) && /Ada/.test(names), names);
   const scores = (await rival.locator('#dBoard .sc').allTextContents()).map((t) => parseFloat(t));
@@ -397,7 +425,7 @@ async function main() {
   await rival.waitForSelector('#home:not(.hide)', { timeout: 10000 });
   await rival.waitForTimeout(900);
   check('home board fills in after playing',
-    (await rival.locator('#homeBoard .prow').count()) === 2,
+    (await rival.locator('#homeBoard .prow').count()) >= 2,
     String(await rival.locator('#homeBoard .prow').count()));
   check('home board marks you', (await rival.locator('#homeBoard .prow.me').count()) === 1);
   check('home shows your standing', /#\d/.test(await rival.textContent('#dailyRank')),

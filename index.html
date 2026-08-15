@@ -313,6 +313,7 @@
           <p id="careerEmpty" class="tiny hide" style="text-align:center">
             No finished games yet. Play a room with a friend to get on the board.
           </p>
+          <p id="careerMore" class="tiny hide" style="text-align:center"></p>
           <p class="tiny" style="text-align:center">
             Room games only. Win an N-player room for N points and a 🥇; last place still
             takes 1.
@@ -1194,7 +1195,6 @@
     }
   }
 
-  const HOME_BOARD_ROWS = 5;
 
   /** The daily standings on the home screen, so the board is the first thing
       you see rather than something you have to go looking for. */
@@ -1214,16 +1214,17 @@
     $('dailyRank').textContent = standing;
     if (boardTab === 'today') $('boardRank').textContent = standing;
 
-    const top = st.board.slice(0, HOME_BOARD_ROWS);
-    const rows = top.map((r) => `
+    const rows = st.board.map((r) => `
       <div class="prow ${r.you ? 'me' : ''}">
         <span class="rank">${r.rank}</span>
         <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}
           ${r.done < st.total ? `<span class="tag">${r.done}/${st.total}</span>` : ''}</span>
         <span class="sc">${r.total.toFixed(2)}</span>
       </div>`).join('');
-    const rest = st.players - top.length;
-    const more = rest > 0 ? `+ ${rest} more` : '';
+    // Everyone is listed. This only appears if the server had to cap the list,
+    // so a truncated board is never silently short.
+    const rest = st.players - st.board.length;
+    const more = rest > 0 ? `+ ${rest} not shown` : '';
 
     // The same standings appear on the daily tab and under the leaderboard, so
     // both copies are filled from one render.
@@ -1289,7 +1290,7 @@
 
   function renderCareer(st) {
     careerCache = st;
-    $('careerBoard').innerHTML = st.board.slice(0, HOME_BOARD_ROWS).map((r) => `
+    $('careerBoard').innerHTML = st.board.map((r) => `
       <div class="prow ${r.you ? 'me' : ''}">
         <span class="rank">${r.rank}</span>
         <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}
@@ -1298,6 +1299,9 @@
         <span class="sc">${r.points}</span>
       </div>`).join('');
     $('careerEmpty').classList.toggle('hide', st.players > 0);
+    const careerRest = st.players - st.board.length;
+    $('careerMore').textContent = careerRest > 0 ? `+ ${careerRest} not shown` : '';
+    $('careerMore').classList.toggle('hide', careerRest <= 0);
     if (boardTab === 'alltime') {
       $('boardRank').textContent = st.myRank
         ? `You're #${st.myRank}`

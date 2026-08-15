@@ -1,6 +1,6 @@
 {
   "name": "toon-tone-party",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "private": true,
   "description": "Multiplayer brand-colour guessing game — rooms, five rounds, live leaderboard, daily challenge.",
   "engines": {

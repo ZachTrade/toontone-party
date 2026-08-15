@@ -102,8 +102,10 @@ possible day is 30.00.
   changes overnight for the people playing rather than mid-morning. It's one constant,
   `DAY_OFFSET_MINUTES` in `api/_lib.js`. `DAILY_LOGOS` sets how many.
 
-The board ranks on the accumulated total and marks anyone still mid-run (`2/3`), so it
-reads honestly through the day.
+The board lists **everyone** who played, ranks on the accumulated total and marks anyone
+still mid-run (`2/3`), so it reads honestly through the day. The server caps a board at
+100 rows; past that the card says how many aren't shown rather than being quietly
+short.
 
 Boards key on the claimed name, so the same person on a phone and a laptop is one
 player rather than two.
