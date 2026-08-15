@@ -22,9 +22,14 @@ const ACTIVE_MS = 25000; // a player counts as present if seen this recently
 const DAILY_TTL = 3 * 24 * 3600; // today's board plus a couple of days of history
 const DAILY_BOARD_MAX = 100; // how much of the board to send down
 
+// Bump to abandon every stored daily board and start them empty. The old keys
+// are simply orphaned and expire on their own TTL. Bumped once to clear a day
+// of test scores.
+const DAILY_EPOCH = 2;
+
 const kRoom = (c) => `tt:${c}`;
-const kDaily = (d) => `tt:d:${d}`;
-const kDailyPrompt = (d) => `tt:d:${d}:p`;
+const kDaily = (d) => `tt:d${DAILY_EPOCH}:${d}`;
+const kDailyPrompt = (d) => `tt:d${DAILY_EPOCH}:${d}:p`;
 const kPlayers = (c) => `tt:${c}:p`;
 const kRound = (c, g, n) => `tt:${c}:g${g}:r${n}`;
 const kDone = (c, g, n) => `tt:${c}:g${g}:r${n}:done`;
