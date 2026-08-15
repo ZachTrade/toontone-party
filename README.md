@@ -11,12 +11,16 @@ Five rounds, up to 12 players per room, live leaderboard, podium at the end.
 
 ## Deploying to Vercel
 
-1. Import this repo in Vercel (**Add New → Project**), pointing at the branch
-   `claude/logo-color-guessing-game-zqrq0r`.
+Already deployed: the Vercel project `toontone-party` is linked to this repo and deploys
+`main` to production on every push. To set one up from scratch:
+
+1. Import this repo in Vercel (**Add New → Project**).
 2. No build settings needed — it's static files plus one serverless function, so let
-   Vercel auto-detect (framework: Other).
+   Vercel auto-detect (framework: Other). `api/game.js` becomes `/api/game` by
+   convention, so **the `api/` directory has to stay intact** — flatten it and the game
+   loads but every room action 404s.
 3. Add the two environment variables below under **Settings → Environment Variables**,
-   then deploy.
+   then redeploy.
 
 ### Environment variables (required)
 
