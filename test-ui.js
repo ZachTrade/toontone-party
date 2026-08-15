@@ -213,6 +213,36 @@ async function main() {
   check('guest waits for host', await visible(guest, '#waitAgain'));
   await host.screenshot({ path: `${SHOTS}/5-final.png`, fullPage: true });
 
+  // ---- the finished game lands on the all-time board ----
+  const podiumTags = (await host.locator('#podium .pod .tag').allTextContents()).join(' ');
+  check('the podium shows what was earned', /\+\d+ pts/.test(podiumTags), podiumTags.trim());
+  check('the winner gets a gold on the podium', /🥇/.test(podiumTags), podiumTags.trim());
+
+  const spectator = await mk('spectator');
+  await spectator.goto(BASE);
+  await spectator.waitForTimeout(600);
+  check('the leaderboard has both tabs',
+    (await visible(spectator, '#tabToday')) && (await visible(spectator, '#tabAllTime')));
+  check('today is the tab you land on',
+    (await visible(spectator, '#paneToday')) && !(await visible(spectator, '#paneAllTime')));
+
+  await spectator.click('#tabAllTime');
+  await spectator.waitForTimeout(900);
+  check('the all-time tab opens',
+    (await visible(spectator, '#paneAllTime')) && !(await visible(spectator, '#paneToday')));
+  const careerRows = await spectator.locator('#careerBoard .prow').count();
+  check('the all-time board lists the players', careerRows === 2, String(careerRows));
+  const careerText = (await spectator.locator('#careerBoard').textContent()).replace(/\s+/g, ' ');
+  check('it shows games played', /1 game/.test(careerText), careerText.trim());
+  check('it shows an accumulated gold medal', /🥇 1/.test(careerText), careerText.trim());
+  // Two players means 2 points for the win and 1 for second.
+  const careerPoints = (await spectator.locator('#careerBoard .sc').allTextContents())
+    .map((t) => parseInt(t, 10));
+  check('points scale with the room size', careerPoints[0] === 2 && careerPoints[1] === 1,
+    careerPoints.join(', '));
+  await spectator.screenshot({ path: `${SHOTS}/10-alltime.png`, fullPage: true });
+  await spectator.close();
+
   await host.click('#btnAgain');
   await host.waitForSelector('#play:not(.hide)', { timeout: 12000 });
   await guest.waitForSelector('#play:not(.hide)', { timeout: 12000 });

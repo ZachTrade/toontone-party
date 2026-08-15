@@ -38,6 +38,10 @@ const TOKEN_TTL = 180 * 24 * 3600; // a sign-in lasts about six months
 const PIN_TRIES = 8; // wrong PINs allowed before a name locks out
 const PIN_LOCK_TTL = 900; // ...for fifteen minutes
 
+const CAREER_BOARD_MAX = 100;
+
+const kCareer = 'tt:career';
+const kAwarded = (c, g) => `tt:${c}:g${g}:aw`;
 const kUser = (n) => `tt:u:${n}`;
 const kToken = (t) => `tt:t:${t}`;
 const kPinFails = (n) => `tt:pf:${n}`;
@@ -106,6 +110,112 @@ function parseZset(list) {
   return out;
 }
 
+// ------------------------------------------------------------------ career
+
+/**
+ * Bank one finished game into the all-time board.
+ *
+ * Points scale with the room: in an N-player game first gets N, second N-1,
+ * down to 1 for last — so winning a big room is worth more than winning a
+ * small one. First place also takes a gold.
+ *
+ * Returns what each player earned, or null when the game didn't count.
+ */
+async function awardCareer(code, gameId) {
+  // The caller already holds the round-advance lock, but a second key makes
+  // double-crediting impossible even if that ever changes.
+  const once = await cmd('SET', kAwarded(code, gameId), '1', 'NX', 'EX', String(TTL));
+  if (!once) return null;
+
+  const players = parsePlayers(await cmd('HGETALL', kPlayers(code)));
+  const totals = parseZset(
+    await cmd('ZRANGE', kTotals(code, gameId), '0', '-1', 'REV', 'WITHSCORES')
+  );
+
+  const rows = Object.entries(players)
+    // Only claimed names have somewhere to bank a result.
+    .filter(([, p]) => p.uid)
+    .map(([pid, p]) => ({
+      pid,
+      uid: p.uid,
+      name: p.name,
+      total: Math.round((totals[pid] || 0) * 100) / 100,
+    }));
+
+  // Playing alone would otherwise mint a gold medal every five rounds.
+  if (rows.length < 2) return null;
+
+  rows.sort((a, b) => b.total - a.total);
+
+  // Standard competition ranking: a tie shares the place, and the next player
+  // down skips one. Tied winners both take gold.
+  const n = rows.length;
+  const awards = {};
+  let rank = 0;
+  let seen = 0;
+  let prev = null;
+  for (const r of rows) {
+    seen += 1;
+    if (prev === null || r.total < prev) {
+      rank = seen;
+      prev = r.total;
+    }
+    awards[r.pid] = { rank, points: n - rank + 1, gold: rank === 1 ? 1 : 0 };
+  }
+
+  const career = parsePlayers(await cmd('HGETALL', kCareer));
+  const writes = [];
+  for (const r of rows) {
+    const a = awards[r.pid];
+    const cur = career[r.uid] || { name: r.name, games: 0, wins: 0, points: 0 };
+    writes.push([
+      'HSET',
+      kCareer,
+      r.uid,
+      JSON.stringify({
+        name: r.name, // keep the display name current
+        games: (cur.games || 0) + 1,
+        wins: (cur.wins || 0) + a.gold,
+        points: (cur.points || 0) + a.points,
+        lastAt: Date.now(),
+      }),
+    ]);
+  }
+  await pipeline(writes);
+  return awards;
+}
+
+async function opCareer(body) {
+  const who = await accountFor(body.token);
+  const career = parsePlayers(await cmd('HGETALL', kCareer));
+  const rows = Object.entries(career)
+    .map(([uid, c]) => ({
+      uid,
+      name: c.name,
+      games: c.games || 0,
+      wins: c.wins || 0,
+      points: c.points || 0,
+    }))
+    // Points first, then medals, then fewest games — so a high win rate beats
+    // grinding the same total out of twice as many games.
+    .sort((a, b) => b.points - a.points || b.wins - a.wins || a.games - b.games);
+
+  const mine = who ? rows.findIndex((r) => r.uid === who.id) : -1;
+  return {
+    ok: true,
+    board: rows.slice(0, CAREER_BOARD_MAX).map((r, i) => ({
+      rank: i + 1,
+      name: r.name,
+      games: r.games,
+      wins: r.wins,
+      points: r.points,
+      you: !!who && r.uid === who.id,
+    })),
+    myRank: mine === -1 ? null : mine + 1,
+    players: rows.length,
+  };
+}
+
 // ------------------------------------------------------------------ state
 
 /**
@@ -171,6 +281,9 @@ async function getState(code, pid, touch) {
       } else {
         room.status = 'ended';
         room.endedAt = Date.now();
+        // Whoever wins this lock is the single writer that ends the game, so
+        // this is the one place the all-time board can be credited exactly once.
+        room.awards = await awardCareer(code, g);
       }
       await saveRoom(room);
     } else {
@@ -250,6 +363,7 @@ async function getState(code, pid, touch) {
   }
 
   if (room.status === 'ended') {
+    out.awards = room.awards || null;
     const cmds = [];
     for (let n = 1; n <= (room.totalRounds || TOTAL_ROUNDS); n++) {
       cmds.push(['HGETALL', kRound(code, gameId, n)]);
@@ -307,7 +421,7 @@ async function opCreate(body) {
   };
   await pipeline([
     ['SET', kRoom(code), JSON.stringify(room), 'EX', String(TTL)],
-    ['HSET', kPlayers(code), pid, JSON.stringify({ name, joined: now, seen: now })],
+    ['HSET', kPlayers(code), pid, JSON.stringify({ name, uid: who.id, joined: now, seen: now })],
     ['EXPIRE', kPlayers(code), String(TTL)],
   ]);
   return { ok: true, code, pid, name };
@@ -328,6 +442,7 @@ async function opJoin(body) {
   if (existing) {
     const pid = clean(body.pid, 32);
     existing.name = name;
+    existing.uid = who.id;
     existing.seen = now;
     await cmd('HSET', kPlayers(code), pid, JSON.stringify(existing));
     return { ok: true, code, pid, name };
@@ -337,7 +452,7 @@ async function opJoin(body) {
 
   const pid = randomId();
   await pipeline([
-    ['HSET', kPlayers(code), pid, JSON.stringify({ name, joined: now, seen: now })],
+    ['HSET', kPlayers(code), pid, JSON.stringify({ name, uid: who.id, joined: now, seen: now })],
     ['EXPIRE', kPlayers(code), String(TTL)],
   ]);
   return { ok: true, code, pid, name };
@@ -684,6 +799,9 @@ module.exports = async (req, res) => {
         break;
       case 'whoami':
         result = await opWhoami(body);
+        break;
+      case 'career':
+        result = await opCareer(body);
         break;
       case 'daily':
         result = await opDaily(body);

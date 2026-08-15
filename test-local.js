@@ -322,6 +322,43 @@ async function main() {
   check('final totals sensible', st.players.every((p) => p.total > 0 && p.total <= 50),
     JSON.stringify(st.players.map((p) => [p.name, p.total])));
 
+  console.log('\n== all-time board ==');
+  // A finished game banks points scaled to the room: 3 players means 3 / 2 / 1.
+  const ranked = st.players.slice().sort((a, b) => b.total - a.total);
+  const aw = st.awards || {};
+  check('the finished game was banked', Object.keys(aw).length === 3, JSON.stringify(aw));
+  check('points scale with the room size',
+    aw[ranked[0].pid].points === 3 && aw[ranked[1].pid].points === 2 && aw[ranked[2].pid].points === 1,
+    JSON.stringify(ranked.map((p) => [p.name, aw[p.pid] && aw[p.pid].points])));
+  check('only the winner takes gold',
+    aw[ranked[0].pid].gold === 1 && aw[ranked[1].pid].gold === 0 && aw[ranked[2].pid].gold === 0);
+
+  const career1 = await call('career', { token: zt });
+  check('the all-time board lists everyone who played', career1.players === 3,
+    JSON.stringify(career1.board.map((r) => r.name)));
+  check('one game each is recorded', career1.board.every((r) => r.games === 1),
+    JSON.stringify(career1.board.map((r) => [r.name, r.games])));
+  check('exactly one gold was handed out',
+    career1.board.reduce((t, r) => t + r.wins, 0) === 1,
+    JSON.stringify(career1.board.map((r) => [r.name, r.wins])));
+  check('the board is ordered by points',
+    career1.board.every((r, i) => i === 0 || career1.board[i - 1].points >= r.points),
+    JSON.stringify(career1.board.map((r) => r.points)));
+  check('the winner tops the all-time board',
+    career1.board[0].name === ranked[0].name && career1.board[0].points === 3,
+    JSON.stringify(career1.board[0]));
+  check('you are marked on the all-time board',
+    career1.board.some((r) => r.you) && career1.myRank !== null);
+
+  // Polling again must not credit the same game twice.
+  await call('state', { code, pid: host.pid });
+  await call('state', { code, pid: p2.pid });
+  const career2 = await call('career', { token: zt });
+  check('a finished game is banked exactly once',
+    career2.board.every((r) => r.games === 1) &&
+    career2.board.reduce((t, r) => t + r.wins, 0) === 1,
+    JSON.stringify(career2.board.map((r) => [r.name, r.games, r.wins])));
+
   const again = await call('again', { code, pid: host.pid });
   check('play again accepted', again.ok === true, JSON.stringify(again));
   st = await call('state', { code, pid: host.pid });

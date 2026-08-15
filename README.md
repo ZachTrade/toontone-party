@@ -7,8 +7,9 @@ memory on hue / saturation / brightness sliders, **and the logo repaints itself 
 you drag**, so you're judging the colour on the real mark rather than an abstract
 swatch. Closest guess wins the round.
 
-Five rounds, up to 12 players per room, live leaderboard, podium at the end — plus a
-daily challenge: three logos a day, same three for everyone, highest total wins.
+Five rounds, up to 12 players per room, live leaderboard, podium at the end. Room wins
+bank points and gold medals on an all-time board, and a daily challenge gives everyone
+the same three logos.
 
 ## Deploying to Vercel
 
@@ -109,6 +110,30 @@ player rather than two.
 
 Boards are kept for three days.
 
+## All-time board
+
+The home screen's leaderboard has two tabs: **Today** (the daily challenge) and
+**All-time** — wins, points and games across finished room games.
+
+**Points scale with the room.** In an N-player game first takes N points, second N-1,
+down to 1 for last. Winning a six-player room is worth more than winning a pair, and
+turning up for a game you lose still beats not playing.
+
+First place also takes a **🥇**, and the board shows how many each player has
+accumulated. Ranking is points, then medals, then fewest games — so a good win rate
+beats grinding the same total out of twice as many games.
+
+Two guards on the numbers:
+
+- **Solo games don't count.** Otherwise you could mint a gold every five rounds by
+  playing alone. The final screen says so rather than looking broken.
+- **A game is banked exactly once.** Crediting happens in the single place that ends a
+  game — whoever wins the round-advance lock — behind its own `SET NX` key, so a dozen
+  clients polling as the last round expires can't credit it a dozen times.
+
+Only claimed names are banked, since a name is where a result gets stored. Ties share
+the place and both tied winners take gold.
+
 ## What the reveal shows
 
 The reveal gives you the real colour beside yours as a swatch, the same logo tinted both
@@ -131,7 +156,7 @@ meaningless, so for those it neither carries weight nor scales anything. See
 | --- | --- |
 | `index.html` | The whole client — every screen, the sliders, the timer, polling |
 | `logos.js` | 91 real brand marks as re-tintable inline SVG (see below) |
-| `api/game.js` | The one API endpoint; `op` selects identify / whoami / create / join / start / submit / state / daily / dailySubmit |
+| `api/game.js` | The one API endpoint; `op` selects identify / whoami / create / join / start / submit / state / career / daily / dailySubmit |
 | `api/_lib.js` | Redis client, colour maths, scoring, round building |
 | `api/_brands.js` | The brand list with official colours and difficulty tiers |
 | `tools/add-logos.js` | Merges SVGs from `tools/logos-src/` into `logos.js` (`npm run logos`) |

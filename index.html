@@ -136,6 +136,13 @@
     background: #fff; border: 2px solid #14141c; box-shadow: 0 2px 8px #0009;
   }
 
+  .tabs { display: flex; gap: 6px; }
+  .tabs button {
+    padding: 7px 13px; font-size: 13px; font-weight: 700; border-radius: 999px;
+    background: #ffffff0f; color: var(--muted); border: 1px solid var(--line);
+  }
+  .tabs button.on { background: var(--accent); color: #14141c; border-color: transparent; }
+
   .plist { display: grid; gap: 8px; }
   .prow {
     display: flex; align-items: center; gap: 11px;
@@ -240,15 +247,32 @@
     </div>
 
     <div class="card stack">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="font-size:15px">Today's leaderboard</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div class="tabs">
+          <button id="tabToday" class="on">Today</button>
+          <button id="tabAllTime">All-time</button>
+        </div>
         <span id="homeRank" class="pill">—</span>
       </div>
-      <div id="homeBoard" class="plist"></div>
-      <p id="homeBoardEmpty" class="tiny hide" style="text-align:center">
-        Nobody's played today yet. Be first.
-      </p>
-      <p id="homeBoardMore" class="tiny hide" style="text-align:center"></p>
+
+      <div id="paneToday" class="stack">
+        <div id="homeBoard" class="plist"></div>
+        <p id="homeBoardEmpty" class="tiny hide" style="text-align:center">
+          Nobody's played today yet. Be first.
+        </p>
+        <p id="homeBoardMore" class="tiny hide" style="text-align:center"></p>
+      </div>
+
+      <div id="paneAllTime" class="stack hide">
+        <div id="careerBoard" class="plist"></div>
+        <p id="careerEmpty" class="tiny hide" style="text-align:center">
+          No finished games yet. Play a room with a friend to get on the board.
+        </p>
+        <p class="tiny" style="text-align:center">
+          Room games only. Win an N-player room for N points and a 🥇; last place still
+          takes 1.
+        </p>
+      </div>
     </div>
 
     <div class="card stack">
@@ -722,12 +746,22 @@
       : '';
 
     const medals = ['🥇', '🥈', '🥉'];
-    $('podium').innerHTML = board.map((p, i) => `
+    const awards = st.awards || {};
+    $('podium').innerHTML = board.map((p, i) => {
+      const a = awards[p.pid];
+      return `
       <div class="pod ${i === 0 ? 'p1' : ''}">
         <span class="medal">${medals[i] || i + 1}</span>
-        <span class="nm">${esc(p.name)}${p.pid === me.pid ? ' <span class="tag">you</span>' : ''}</span>
+        <span class="nm">${esc(p.name)}${p.pid === me.pid ? ' <span class="tag">you</span>' : ''}
+          ${a ? `<span class="tag">${a.gold ? '🥇 ' : ''}+${a.points} pts</span>` : ''}</span>
         <span class="sc">${p.total.toFixed(2)}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
+
+    // Solo games are excluded, so say why rather than looking broken.
+    $('finalNote').textContent = st.awards
+      ? `${$('finalNote').textContent} Banked to the all-time board.`
+      : `${$('finalNote').textContent} Solo games don't count towards the all-time board.`;
 
     const nameOf = {};
     for (const p of st.players) nameOf[p.pid] = p.name;
@@ -831,7 +865,7 @@
     me.code = ''; me.pid = ''; last = null; seenPhaseKey = ''; lockedRoundKey = '';
     history.replaceState(null, '', location.pathname);
     show('home');
-    loadHomeDaily();
+    refreshHome();
     if (msg) {
       $('homeErr').textContent = msg;
       $('homeErr').classList.remove('hide');
@@ -882,7 +916,7 @@
       store.name = r.name;
       $('idPin').value = '';
       renderIdentity();
-      loadHomeDaily();
+      refreshHome();
       toast(r.created ? `${r.name} is yours` : `Welcome back, ${r.name}`);
     } catch {
       $('idErr').textContent = 'Network trouble. Try again.';
@@ -902,7 +936,7 @@
     $('idName').value = '';
     $('idPin').value = '';
     renderIdentity();
-    loadHomeDaily();
+    refreshHome();
   });
 
   // ---------------------------------------------------------------- actions
@@ -1140,9 +1174,11 @@
           ? `Continue — logo ${st.index + 1} of ${st.total}`
           : "Play today's logos";
 
-    $('homeRank').textContent = st.myRank
-      ? `You're #${st.myRank}`
-      : st.players === 1 ? '1 player' : `${st.players} players`;
+    if (homeTab === 'today') {
+      $('homeRank').textContent = st.myRank
+        ? `You're #${st.myRank}`
+        : st.players === 1 ? '1 player' : `${st.players} players`;
+    }
 
     const top = st.board.slice(0, HOME_BOARD_ROWS);
     $('homeBoard').innerHTML = top.map((r) => `
@@ -1159,6 +1195,12 @@
     $('homeBoardMore').classList.toggle('hide', rest <= 0);
   }
 
+  /** Both boards change after a game, so they refresh together. */
+  function refreshHome() {
+    loadHomeDaily();
+    loadCareer();
+  }
+
   async function loadHomeDaily() {
     try {
       const st = await api('daily', { token: store.token });
@@ -1167,6 +1209,52 @@
       // Leave the placeholders be — the home screen still works without it.
     }
   }
+
+  // ---- all-time board: wins, points and medals across finished room games ----
+  let homeTab = 'today';
+  let careerCache = null;
+
+  function renderCareer(st) {
+    careerCache = st;
+    $('careerBoard').innerHTML = st.board.slice(0, HOME_BOARD_ROWS).map((r) => `
+      <div class="prow ${r.you ? 'me' : ''}">
+        <span class="rank">${r.rank}</span>
+        <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}
+          <span class="tag">${r.games} ${r.games === 1 ? 'game' : 'games'}</span></span>
+        ${r.wins ? `<span class="tag">🥇 ${r.wins}</span>` : ''}
+        <span class="sc">${r.points}</span>
+      </div>`).join('');
+    $('careerEmpty').classList.toggle('hide', st.players > 0);
+    if (homeTab === 'alltime') {
+      $('homeRank').textContent = st.myRank
+        ? `You're #${st.myRank}`
+        : st.players === 1 ? '1 player' : `${st.players} players`;
+    }
+  }
+
+  async function loadCareer() {
+    try {
+      const st = await api('career', { token: store.token });
+      if (!st.error) renderCareer(st);
+    } catch { /* the rest of the home screen still works */ }
+  }
+
+  function showTab(which) {
+    homeTab = which;
+    $('tabToday').classList.toggle('on', which === 'today');
+    $('tabAllTime').classList.toggle('on', which === 'alltime');
+    $('paneToday').classList.toggle('hide', which !== 'today');
+    $('paneAllTime').classList.toggle('hide', which !== 'alltime');
+    if (which === 'alltime') {
+      if (careerCache) renderCareer(careerCache);
+      loadCareer();
+    } else {
+      loadHomeDaily();
+    }
+  }
+
+  $('tabToday').addEventListener('click', () => showTab('today'));
+  $('tabAllTime').addEventListener('click', () => showTab('alltime'));
 
   $('btnDaily').addEventListener('click', openDaily);
 
@@ -1249,7 +1337,7 @@
         if (r && r.name) store.name = r.name;
         else { store.token = ''; store.name = ''; }
         renderIdentity();
-        loadHomeDaily();
+        refreshHome();
       })
       .catch(() => { /* offline — keep what we have and let actions retry */ });
   }
@@ -1261,13 +1349,13 @@
     if (store.token && store.pid(code)) join(code);
     else if (!store.token) toast('Claim a name, then tap Join');
   }
-  loadHomeDaily();
+  refreshHome();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     if (me.code) pollOnce();
     // Coming back to a home screen left open for hours shouldn't show a stale
     // board, or yesterday's date.
-    else if (!$('home').classList.contains('hide')) loadHomeDaily();
+    else if (!$('home').classList.contains('hide')) refreshHome();
   });
 })();
 </script>
