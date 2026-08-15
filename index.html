@@ -215,6 +215,94 @@
       <button id="btnJoin" class="ghost wide">Join room</button>
       <p id="homeErr" class="err hide"></p>
     </div>
+
+    <div class="card stack">
+      <p class="muted" style="font-weight:700;color:var(--text)">Daily challenge</p>
+      <p class="tiny">
+        One logo a day, the same one for everybody. You get a single shot at it —
+        then you're on the day's leaderboard.
+      </p>
+      <button id="btnDaily" class="ghost wide">Play today's logo</button>
+    </div>
+  </section>
+
+  <!-- ================= DAILY ================= -->
+  <section id="daily" class="stack hide">
+    <div class="hud">
+      <span class="pill" id="dDay">Daily</span>
+      <span class="pill" id="dCount">—</span>
+    </div>
+
+    <!-- No emoji until they've answered: a coloured one gives the game away. -->
+    <div class="card prompt">
+      <div class="brandname" id="dBrand">—</div>
+      <div class="element" id="dElement">—</div>
+    </div>
+
+    <div class="card stack" id="dPick">
+      <div class="stage" id="dStage"></div>
+      <div class="swatch bar" id="dPreview"></div>
+      <div class="sliders">
+        <div>
+          <div class="sl-head"><span>Hue</span><b id="dvH">0°</b></div>
+          <input id="dH" type="range" min="0" max="359" value="0" />
+        </div>
+        <div>
+          <div class="sl-head"><span>Saturation</span><b id="dvS">70%</b></div>
+          <input id="dS" type="range" min="0" max="100" value="70" />
+        </div>
+        <div>
+          <div class="sl-head"><span>Brightness</span><b id="dvB">80%</b></div>
+          <input id="dB" type="range" min="0" max="100" value="80" />
+        </div>
+      </div>
+      <input id="dName" type="text" maxlength="16" placeholder="Your name" autocomplete="nickname" />
+      <button id="btnDailyLock" class="wide">Lock in today's answer</button>
+      <p id="dHint" class="tiny" style="text-align:center">
+        One shot — no timer, but no second go either.
+      </p>
+      <p id="dErr" class="err hide" style="text-align:center"></p>
+    </div>
+
+    <div class="card stack hide" id="dResult" style="text-align:center">
+      <div>
+        <span style="font-size:30px" id="dEmoji">🎨</span>
+        <h2 style="font-size:22px;margin-top:6px" id="dResultBrand">—</h2>
+        <p class="muted" id="dResultElement">—</p>
+      </div>
+      <div class="cmp">
+        <div>
+          <div class="lab">The real colour</div>
+          <div class="stage sm" id="dTargetLogo"></div>
+          <div class="swatch bar" id="dTarget" style="margin-top:6px"></div>
+          <div class="tiny" id="dTargetHex" style="margin-top:6px"></div>
+        </div>
+        <div>
+          <div class="lab">Your guess</div>
+          <div class="stage sm" id="dMineLogo"></div>
+          <div class="swatch bar" id="dMine" style="margin-top:6px"></div>
+          <div class="tiny" id="dMineHex" style="margin-top:6px"></div>
+        </div>
+      </div>
+      <div>
+        <div class="scorebig" id="dScore">—</div>
+        <p class="tiny" id="dScoreNote">out of 10</p>
+      </div>
+      <button id="btnDailyShare" class="ghost wide">Share your score</button>
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="font-size:15px">Today's leaderboard</h3>
+        <span id="dRank" class="pill">—</span>
+      </div>
+      <div id="dBoard" class="plist"></div>
+      <p id="dEmpty" class="tiny hide" style="text-align:center">
+        Nobody's played today yet. Be first.
+      </p>
+    </div>
+
+    <button id="btnDailyHome" class="ghost wide">Back to start</button>
   </section>
 
   <!-- ================= LOBBY ================= -->
@@ -404,7 +492,25 @@
     set name(v) { try { localStorage.setItem('tt_name', v); } catch {} },
     pid(code) { try { return localStorage.getItem('tt_pid_' + code) || ''; } catch { return ''; } },
     setPid(code, pid) { try { localStorage.setItem('tt_pid_' + code, pid); } catch {} },
+    /** One identity per browser for the daily board, made on first play. */
+    dailyPid() {
+      try {
+        let id = localStorage.getItem('tt_daily_pid');
+        if (!id) {
+          id = '';
+          for (let i = 0; i < 16; i++) id += Math.floor(Math.random() * 16).toString(16);
+          localStorage.setItem('tt_daily_pid', id);
+        }
+        return id;
+      } catch {
+        // Private mode with storage blocked — still playable, just not
+        // remembered, so a reload looks like a new player.
+        return dailyFallbackPid;
+      }
+    },
   };
+  let dailyFallbackPid = '';
+  for (let i = 0; i < 16; i++) dailyFallbackPid += Math.floor(Math.random() * 16).toString(16);
 
   // ---------------------------------------------------------------- state
   const me = { code: '', pid: '', name: '' };
@@ -416,39 +522,58 @@
   let submitting = false;
 
   function show(id) {
-    for (const s of ['home', 'lobby', 'play', 'reveal', 'final']) {
+    for (const s of ['home', 'lobby', 'play', 'reveal', 'final', 'daily']) {
       $(s).classList.toggle('hide', s !== id);
     }
   }
 
   // ---------------------------------------------------------------- sliders
-  const sH = $('sH'), sS = $('sS'), sB = $('sB');
-
-  // The prompt currently on the stage, so paint() can re-tint the right mark.
-  let stagePrompt = null;
-  let stageKey = '';
-
   function drawStage(el, prompt, color, cls) {
     if (!prompt) return;
     el.innerHTML = window.ToonLogos.logoSvg(prompt.brand, color, cls);
   }
 
-  function paint() {
-    const h = +sH.value, s = +sS.value, b = +sB.value;
-    $('vH').textContent = h + '°';
-    $('vS').textContent = s + '%';
-    $('vB').textContent = b + '%';
-    $('preview').style.background = css(h, s, b);
-    if (stagePrompt) drawStage($('stage'), stagePrompt, css(h, s, b));
+  /**
+   * Wires one hue/saturation/brightness trio to a logo stage that re-tints as
+   * they move. The room game and the daily challenge each get their own.
+   */
+  function makePicker(ids) {
+    const sH = $(ids.h), sS = $(ids.s), sB = $(ids.b);
+    let prompt = null;
 
-    const hueStops = [];
-    for (let i = 0; i <= 360; i += 30) hueStops.push(css(i % 360, Math.max(s, 60), Math.max(b, 70)));
-    sH.style.setProperty('--track', `linear-gradient(90deg, ${hueStops.join(',')})`);
-    sS.style.setProperty('--track', `linear-gradient(90deg, ${css(h, 0, b)}, ${css(h, 100, b)})`);
-    sB.style.setProperty('--track', `linear-gradient(90deg, ${css(h, s, 0)}, ${css(h, s, 100)})`);
+    function value() { return { h: +sH.value, s: +sS.value, b: +sB.value }; }
+
+    function paint() {
+      const { h, s, b } = value();
+      $(ids.vh).textContent = h + '°';
+      $(ids.vs).textContent = s + '%';
+      $(ids.vb).textContent = b + '%';
+      $(ids.preview).style.background = css(h, s, b);
+      if (prompt) drawStage($(ids.stage), prompt, css(h, s, b));
+
+      const hueStops = [];
+      for (let i = 0; i <= 360; i += 30) hueStops.push(css(i % 360, Math.max(s, 60), Math.max(b, 70)));
+      sH.style.setProperty('--track', `linear-gradient(90deg, ${hueStops.join(',')})`);
+      sS.style.setProperty('--track', `linear-gradient(90deg, ${css(h, 0, b)}, ${css(h, 100, b)})`);
+      sB.style.setProperty('--track', `linear-gradient(90deg, ${css(h, s, 0)}, ${css(h, s, 100)})`);
+    }
+
+    for (const el of [sH, sS, sB]) el.addEventListener('input', paint);
+    paint();
+
+    return {
+      value,
+      paint,
+      setPrompt(p) { prompt = p; paint(); },
+      setDisabled(d) { for (const el of [sH, sS, sB]) el.disabled = d; },
+    };
   }
-  for (const el of [sH, sS, sB]) el.addEventListener('input', paint);
-  paint();
+
+  const picker = makePicker({
+    h: 'sH', s: 'sS', b: 'sB', vh: 'vH', vs: 'vS', vb: 'vB',
+    preview: 'preview', stage: 'stage',
+  });
+  let stageKey = '';
 
   // ---------------------------------------------------------------- render
   function playerRow(p, opts) {
@@ -486,14 +611,13 @@
     const key = st.gameId + ':' + st.round;
     if (stageKey !== key) {
       stageKey = key;
-      stagePrompt = st.prompt;
-      paint();
+      picker.setPrompt(st.prompt);
     }
     const locked = !!st.mySubmission || lockedRoundKey === key;
     $('btnLock').classList.toggle('hide', locked);
     $('lockHint').classList.toggle('hide', locked);
     $('lockedMsg').classList.toggle('hide', !locked);
-    for (const el of [sH, sS, sB]) el.disabled = locked;
+    picker.setDisabled(locked);
 
     $('playList').innerHTML = st.players.map((p) =>
       playerRow(p, { right: (x) => `<span class="tag">${x.submitted ? 'locked in' : 'thinking…'}</span>` })
@@ -627,7 +751,7 @@
     } else if (st.status === 'playing' && st.phase === 'guess') {
       if (changed) {
         lockedRoundKey = '';
-        for (const el of [sH, sS, sB]) el.disabled = false;
+        picker.setDisabled(false);
         $('play').classList.add('fade');
         setTimeout(() => $('play').classList.remove('fade'), 300);
       }
@@ -661,6 +785,7 @@
 
   function goHome(msg) {
     stopPoll();
+    stopDailyPoll();
     me.code = ''; me.pid = ''; last = null; seenPhaseKey = ''; lockedRoundKey = '';
     history.replaceState(null, '', location.pathname);
     show('home');
@@ -759,7 +884,7 @@
     // second submission while this one is still in flight.
     lockedRoundKey = key;
     $('btnLock').disabled = true;
-    const guess = { h: +sH.value, s: +sS.value, b: +sB.value };
+    const guess = picker.value();
     try {
       const r = await api('submit', { code: me.code, pid: me.pid, ...guess });
       if (r.error === 'too_late') {
@@ -780,6 +905,132 @@
     }
   }
   $('btnLock').addEventListener('click', () => lockIn(false));
+
+  // ---------------------------------------------------------------- daily
+  const dPicker = makePicker({
+    h: 'dH', s: 'dS', b: 'dB', vh: 'dvH', vs: 'dvS', vb: 'dvB',
+    preview: 'dPreview', stage: 'dStage',
+  });
+  let dailyPoll = null;
+  let dailyState = null;
+  let dailySending = false;
+
+  function renderDaily(st) {
+    dailyState = st;
+    $('dDay').textContent = st.day;
+    $('dCount').textContent = st.players === 1 ? '1 player' : st.players + ' players';
+    $('dBrand').textContent = st.prompt.brand;
+    $('dElement').textContent = st.prompt.element;
+    dPicker.setPrompt(st.prompt);
+
+    $('dPick').classList.toggle('hide', st.played);
+    $('dResult').classList.toggle('hide', !st.played);
+
+    if (st.played && st.target && st.mine) {
+      const t = st.target, m = st.mine;
+      $('dEmoji').textContent = st.prompt.emoji || '🎨';
+      $('dResultBrand').textContent = st.prompt.brand;
+      $('dResultElement').textContent = st.prompt.element;
+      $('dTarget').style.background = css(t.h, t.s, t.b);
+      drawStage($('dTargetLogo'), st.prompt, css(t.h, t.s, t.b));
+      $('dTargetHex').innerHTML = `${t.hex}<br />H${t.h} · S${t.s} · B${t.b}`;
+      $('dMine').style.background = css(m.h, m.s, m.b);
+      drawStage($('dMineLogo'), st.prompt, css(m.h, m.s, m.b));
+      $('dMineHex').innerHTML =
+        `${hex(m.h, m.s, m.b)}<br />H${m.h} · S${m.s} · B${m.b}`;
+      $('dScore').textContent = m.score.toFixed(2);
+      $('dScoreNote').textContent = m.score >= 9 ? 'out of 10 — outstanding' :
+        m.score >= 7.5 ? 'out of 10 — very close' :
+        m.score >= 5 ? 'out of 10 — not bad' : 'out of 10 — ouch';
+    }
+
+    $('dRank').textContent = st.myRank ? `You're #${st.myRank}` : 'Not on the board';
+    $('dEmpty').classList.toggle('hide', st.players > 0);
+    $('dBoard').innerHTML = st.board.map((r) => `
+      <div class="prow ${r.you ? 'me' : ''}">
+        <span class="rank">${r.rank}</span>
+        <span class="chip" style="background:${css(r.guess.h, r.guess.s, r.guess.b)}"></span>
+        <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}</span>
+        <span class="sc">${r.score.toFixed(2)}</span>
+      </div>`).join('');
+  }
+
+  async function refreshDaily() {
+    try {
+      const st = await api('daily', { pid: store.dailyPid() });
+      if (!st.error) renderDaily(st);
+    } catch {
+      /* transient — the next tick retries */
+    }
+  }
+
+  function stopDailyPoll() { if (dailyPoll) clearInterval(dailyPoll); dailyPoll = null; }
+
+  async function openDaily() {
+    stopPoll();
+    $('btnDaily').disabled = true;
+    try {
+      const st = await api('daily', { pid: store.dailyPid() });
+      if (st.error) throw new Error(st.error);
+      $('dName').value = store.name || $('name').value.trim();
+      show('daily');
+      renderDaily(st);
+      stopDailyPoll();
+      // Slow poll: the board fills up as friends play through the day.
+      dailyPoll = setInterval(refreshDaily, 6000);
+    } catch (e) {
+      $('homeErr').textContent = String(e && e.message) === 'not_configured'
+        ? 'The game database isn’t connected yet.'
+        : "Couldn't load today's challenge. Try again in a moment.";
+      $('homeErr').classList.remove('hide');
+    } finally {
+      $('btnDaily').disabled = false;
+    }
+  }
+
+  $('btnDaily').addEventListener('click', openDaily);
+
+  $('btnDailyLock').addEventListener('click', async () => {
+    if (dailySending || (dailyState && dailyState.played)) return;
+    dailySending = true;
+    $('btnDailyLock').disabled = true;
+    $('dErr').classList.add('hide');
+    try {
+      // The daily board is public, so the name is set here rather than being
+      // inherited from a room screen the player may never have seen.
+      const name = $('dName').value.trim() || store.name || 'Player ' + Math.floor(Math.random() * 90 + 10);
+      const st = await api('dailySubmit', {
+        pid: store.dailyPid(),
+        name,
+        ...dPicker.value(),
+      });
+      if (st.error) throw new Error(st.error);
+      store.name = name;
+      renderDaily(st);
+      if (st.already) toast("You'd already played today");
+    } catch {
+      $('dErr').textContent = "That didn't send — try once more.";
+      $('dErr').classList.remove('hide');
+    } finally {
+      dailySending = false;
+      $('btnDailyLock').disabled = false;
+    }
+  });
+
+  $('btnDailyShare').addEventListener('click', () => {
+    const st = dailyState;
+    if (!st || !st.mine) return;
+    const text = `Toon Tone Party ${st.day} — ${st.mine.score.toFixed(2)}/10 on ${st.prompt.brand}` +
+      (st.myRank ? ` (#${st.myRank} of ${st.players})` : '');
+    const url = location.origin + location.pathname;
+    if (navigator.share) {
+      navigator.share({ title: 'Toon Tone Party', text, url }).catch(() => copy(text + ' ' + url, 'Score'));
+    } else {
+      copy(text + ' ' + url, 'Score');
+    }
+  });
+
+  $('btnDailyHome').addEventListener('click', () => { stopDailyPoll(); goHome(); });
 
   async function copy(text, label) {
     try {

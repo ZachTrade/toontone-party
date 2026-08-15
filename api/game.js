@@ -7,6 +7,8 @@ const {
   buildRounds,
   randomCode,
   randomId,
+  dayKey,
+  dailyPrompt,
 } = require('./_lib.js');
 
 const GUESS_MS = 45000; // time to lock in a colour
@@ -16,7 +18,12 @@ const MAX_PLAYERS = 12;
 const TOTAL_ROUNDS = 5;
 const ACTIVE_MS = 25000; // a player counts as present if seen this recently
 
+const DAILY_TTL = 3 * 24 * 3600; // today's board plus a couple of days of history
+const DAILY_BOARD_MAX = 100; // how much of the board to send down
+
 const kRoom = (c) => `tt:${c}`;
+const kDaily = (d) => `tt:d:${d}`;
+const kDailyPrompt = (d) => `tt:d:${d}:p`;
 const kPlayers = (c) => `tt:${c}:p`;
 const kRound = (c, g, n) => `tt:${c}:g${g}:r${n}`;
 const kDone = (c, g, n) => `tt:${c}:g${g}:r${n}:done`;
@@ -376,6 +383,102 @@ async function opSubmit(body) {
   return { ok: true, score };
 }
 
+// ------------------------------------------------------------------ daily
+
+/**
+ * The prompt for a day, pinned in Redis the first time anyone asks for it.
+ *
+ * `dailyPrompt` is already deterministic, but it derives from the brand list —
+ * so a deploy that adds a brand would shift the answer for everyone who hasn't
+ * played yet, scoring them against a different colour than their friends.
+ * Pinning it means the day's target is fixed by whoever plays first.
+ */
+async function loadDailyPrompt(day) {
+  const parse = (raw) => (typeof raw === 'string' ? JSON.parse(raw) : raw);
+  const existing = await cmd('GET', kDailyPrompt(day));
+  if (existing) return parse(existing);
+
+  const fresh = dailyPrompt(day);
+  await cmd('SET', kDailyPrompt(day), JSON.stringify(fresh), 'NX', 'EX', String(DAILY_TTL));
+  // Re-read rather than trusting our own write: if two players arrived at once,
+  // the loser of the NX has to use the winner's prompt, not its own.
+  const settled = await cmd('GET', kDailyPrompt(day));
+  return settled ? parse(settled) : fresh;
+}
+
+function dailyBoard(entries, pid) {
+  const rows = Object.entries(entries)
+    .map(([id, e]) => ({
+      pid: id,
+      name: e.name,
+      score: e.score,
+      guess: { h: e.h, s: e.s, b: e.b },
+      at: e.at || 0,
+    }))
+    // Ties break towards whoever got there first.
+    .sort((a, b) => b.score - a.score || a.at - b.at);
+
+  const rank = rows.findIndex((r) => r.pid === pid);
+  return {
+    board: rows.slice(0, DAILY_BOARD_MAX).map((r, i) => ({
+      rank: i + 1,
+      name: r.name,
+      score: r.score,
+      guess: r.guess,
+      you: r.pid === pid,
+    })),
+    myRank: rank === -1 ? null : rank + 1,
+    players: rows.length,
+  };
+}
+
+async function opDaily(body) {
+  const pid = clean(body.pid, 32);
+  const day = dayKey();
+  const prompt = await loadDailyPrompt(day);
+  const entries = parsePlayers(await cmd('HGETALL', kDaily(day)));
+  const mine = pid ? entries[pid] : null;
+
+  const out = {
+    ok: true,
+    now: Date.now(),
+    day,
+    // The emoji hints at the colour, so it stays hidden until they've answered.
+    prompt: { brand: prompt.brand, element: prompt.element },
+    played: !!mine,
+    ...dailyBoard(entries, pid),
+  };
+  if (mine) {
+    out.prompt.emoji = prompt.emoji;
+    out.mine = { h: mine.h, s: mine.s, b: mine.b, score: mine.score };
+    out.target = { h: prompt.h, s: prompt.s, b: prompt.b, hex: prompt.hex };
+  }
+  return out;
+}
+
+async function opDailySubmit(body) {
+  const pid = clean(body.pid, 32);
+  const name = clean(body.name, 16) || 'Player';
+  const h = num(body.h, 0, 359);
+  const s = num(body.s, 0, 100);
+  const b = num(body.b, 0, 100);
+  if (!pid) return { error: 'bad_player' };
+  if (h == null || s == null || b == null) return { error: 'bad_guess' };
+
+  const day = dayKey();
+  const prompt = await loadDailyPrompt(day);
+  const score = scoreGuess(prompt, { h, s, b });
+  const entry = JSON.stringify({ name, h, s, b, score, at: Date.now() });
+
+  // One shot a day: HSETNX keeps the first answer, so a reload or a second tab
+  // can't be used to fish for a better score.
+  const first = await cmd('HSETNX', kDaily(day), pid, entry);
+  if (first) await cmd('EXPIRE', kDaily(day), String(DAILY_TTL));
+
+  const state = await opDaily({ pid });
+  return { ...state, already: !first };
+}
+
 async function readBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string' && req.body) {
@@ -422,6 +525,12 @@ module.exports = async (req, res) => {
         break;
       case 'submit':
         result = await opSubmit(body);
+        break;
+      case 'daily':
+        result = await opDaily(body);
+        break;
+      case 'dailySubmit':
+        result = await opDailySubmit(body);
         break;
       case 'state':
         result = await getState(

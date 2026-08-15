@@ -147,6 +147,79 @@ function buildRounds(count = 5) {
   return shuffle(picked);
 }
 
+// ---------------------------------------------------------------- daily
+
+// The day rolls over at midnight Malaysia time rather than UTC, so "today's
+// logo" changes overnight for the people actually playing it instead of
+// mid-morning. One number to change if that ever needs to move.
+const DAY_OFFSET_MINUTES = 8 * 60;
+
+/** The YYYY-MM-DD a moment belongs to, in the offset above. */
+function dayKey(now) {
+  const at = now == null ? Date.now() : now;
+  return new Date(at + DAY_OFFSET_MINUTES * 60000).toISOString().slice(0, 10);
+}
+
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed) {
+  let a = seed;
+  return function next() {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A fixed permutation of 0..n-1 — same seed, same order, on every machine. */
+function seededOrder(n, seed) {
+  const rnd = mulberry32(hashString(seed));
+  const a = [];
+  for (let i = 0; i < n; i++) a.push(i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
+
+/**
+ * Today's prompt, identical for everyone.
+ *
+ * Nothing random happens per request: the whole prompt list is shuffled once by
+ * a fixed seed, and the day walks one step along it. So every player on a given
+ * date gets the same logo, and no prompt comes back until every other one has
+ * had its turn.
+ */
+function dailyPrompt(key) {
+  const order = seededOrder(BRANDS.length, 'toontone-daily-v1');
+  const dayNumber = Math.floor(Date.parse(key + 'T00:00:00Z') / 86400000);
+  // JS % keeps the sign, and dates before 1970 would otherwise index backwards.
+  const step = ((dayNumber % BRANDS.length) + BRANDS.length) % BRANDS.length;
+  const pick = BRANDS[order[step]];
+  const hsb = hexToHsb(pick.hex);
+  return {
+    day: key,
+    brand: pick.brand,
+    element: pick.element,
+    emoji: pick.emoji,
+    hex: pick.hex,
+    h: hsb.h,
+    s: hsb.s,
+    b: hsb.b,
+  };
+}
+
 // ---------------------------------------------------------------- misc
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1
@@ -174,4 +247,6 @@ module.exports = {
   randomCode,
   randomId,
   shuffle,
+  dayKey,
+  dailyPrompt,
 };

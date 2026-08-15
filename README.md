@@ -7,7 +7,8 @@ memory on hue / saturation / brightness sliders, **and the logo repaints itself 
 you drag**, so you're judging the colour on the real mark rather than an abstract
 swatch. Closest guess wins the round.
 
-Five rounds, up to 12 players per room, live leaderboard, podium at the end.
+Five rounds, up to 12 players per room, live leaderboard, podium at the end — plus a
+daily challenge everyone plays against the same logo.
 
 ## Deploying to Vercel
 
@@ -52,6 +53,33 @@ deployment** — after adding them, redeploy.
 
 Rooms expire two hours after creation.
 
+## Daily challenge
+
+One logo a day, the same one for everybody, on a global leaderboard. No room, no timer —
+but **one attempt**, which is what makes the score worth anything.
+
+- **Same logo for everyone.** Nothing random happens per request. The whole prompt list
+  is shuffled once by a fixed seed and the day walks one step along it, so every player
+  on a date gets the same brand and no prompt returns until all 94 have had a turn.
+- **The target is pinned on first play.** `dailyPrompt` derives from the brand list, so
+  a deploy that adds a brand would otherwise shift the answer mid-day and score people
+  against different colours than their friends. The first request of the day writes the
+  prompt to Redis with `SET NX`; everyone after reads that.
+- **One shot.** The guess is stored with `HSETNX`, so a reload, a second tab or a
+  re-submit can't fish for a better score. Enforced server-side, not by a disabled
+  button.
+- **The answer stays hidden** until you've played — including the emoji, which would
+  otherwise give the colour away.
+- **The day rolls over at midnight Malaysia time** (UTC+8), not UTC, so "today's logo"
+  changes overnight for the people playing rather than mid-morning. It's one constant,
+  `DAY_OFFSET_MINUTES` in `api/_lib.js`.
+
+Identity is a random id in `localStorage`, so the board is per-browser and anyone can
+put any name on it. That's the right trade for a party game; it is not cheat-proof and
+isn't trying to be.
+
+Boards are kept for three days.
+
 ## Scoring
 
 Each round scores 0.00–10.00. Hue carries most of the weight and also scales the whole
@@ -66,7 +94,7 @@ meaningless, so for those it neither carries weight nor scales anything. See
 | --- | --- |
 | `index.html` | The whole client — every screen, the sliders, the timer, polling |
 | `logos.js` | 91 real brand marks as re-tintable inline SVG (see below) |
-| `api/game.js` | The one API endpoint; `op` selects create / join / start / submit / state |
+| `api/game.js` | The one API endpoint; `op` selects create / join / start / submit / state / daily / dailySubmit |
 | `api/_lib.js` | Redis client, colour maths, scoring, round building |
 | `api/_brands.js` | The brand list with official colours and difficulty tiers |
 | `tools/add-logos.js` | Merges SVGs from `tools/logos-src/` into `logos.js` (`npm run logos`) |

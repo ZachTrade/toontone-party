@@ -105,6 +105,60 @@ async function main() {
       m.warnings.some((w) => /text/i.test(w)), m.warnings.join('; '));
   }
 
+  console.log('\n== daily challenge ==');
+  const { dayKey, dailyPrompt } = require('./api/_lib.js');
+  // Everyone has to get the same logo, so nothing here may depend on when or
+  // where it runs.
+  const d1 = dailyPrompt('2026-08-15');
+  const d2 = dailyPrompt('2026-08-15');
+  check('same day gives the same prompt', d1.brand === d2.brand && d1.hex === d2.hex,
+    `${d1.brand} vs ${d2.brand}`);
+  const d3 = dailyPrompt('2026-08-16');
+  check('the next day moves on', d3.brand !== d1.brand || d3.element !== d1.element,
+    `${d1.brand}/${d1.element}`);
+  check('prompt carries a scoreable target',
+    Number.isFinite(d1.h) && Number.isFinite(d1.s) && Number.isFinite(d1.b) && /^#/.test(d1.hex));
+  // Walking a fixed shuffle means no repeat until the list is exhausted.
+  const seen = new Set();
+  for (let i = 0; i < BRANDS.length; i++) {
+    const day = new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10);
+    seen.add(dailyPrompt(day).brand + '|' + dailyPrompt(day).element);
+  }
+  check('a full cycle uses every prompt once', seen.size === BRANDS.length,
+    `${seen.size}/${BRANDS.length}`);
+  check('dayKey looks like a date', /^\d{4}-\d{2}-\d{2}$/.test(dayKey()), dayKey());
+  // Malaysia is UTC+8, so 17:00 UTC is already tomorrow for players there.
+  check('the day rolls over at midnight in Malaysia',
+    dayKey(Date.UTC(2026, 7, 15, 17, 0)) === '2026-08-16',
+    dayKey(Date.UTC(2026, 7, 15, 17, 0)));
+
+  const dA = await call('daily', { pid: 'aaa' });
+  check('daily state loads', dA.ok && !!dA.prompt.brand, JSON.stringify(dA.error || ''));
+  check('the answer is hidden before you play', !dA.target && !dA.prompt.emoji && !dA.played);
+  check('board starts empty', dA.players === 0 && dA.board.length === 0);
+
+  const dSub = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 40, s: 80, b: 90 });
+  check('daily guess scored', typeof dSub.mine.score === 'number', JSON.stringify(dSub.error || ''));
+  check('the answer is revealed after playing', !!dSub.target && !!dSub.prompt.emoji && dSub.played);
+  check('you land on the board', dSub.players === 1 && dSub.myRank === 1);
+
+  const dRetry = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 200, s: 10, b: 10 });
+  check('one shot a day — a second go is ignored',
+    dRetry.already === true && dRetry.mine.h === 40, JSON.stringify(dRetry.mine));
+
+  // A deliberately awful guess, so the ordering is unambiguous.
+  const target = dSub.target;
+  await call('dailySubmit', { pid: 'bbb', name: 'Mia', h: (target.h + 180) % 360, s: 5, b: 5 });
+  const dBoard = await call('daily', { pid: 'bbb' });
+  check('board ranks by score', dBoard.board[0].name === 'Zach' && dBoard.board[1].name === 'Mia',
+    dBoard.board.map((r) => r.name + ':' + r.score).join(', '));
+  check('board marks who you are',
+    dBoard.board.find((r) => r.you).name === 'Mia' && dBoard.myRank === 2);
+  check('board carries each guess colour, for the swatches',
+    dBoard.board.every((r) => Number.isFinite(r.guess.h)));
+  check('a player with no guess is off the board',
+    (await call('daily', { pid: 'ccc' })).myRank === null);
+
   console.log('\n== room flow ==');
   const host = await call('create', { name: 'Zach' });
   check('room created', !!host.code && !!host.pid, JSON.stringify(host));

@@ -161,6 +161,76 @@ async function main() {
       .every((t) => /^\d+\.\d{2}$/.test(t.trim())));
   await host.screenshot({ path: `${SHOTS}/6-autolock.png`, fullPage: true });
 
+  // ---- daily challenge: same logo for everyone, one shot, shared board ----
+  const solo = await mk('daily-1');
+  const rival = await mk('daily-2');
+  await solo.goto(BASE);
+  await rival.goto(BASE);
+  await solo.waitForTimeout(300);
+
+  await solo.click('#btnDaily');
+  await solo.waitForSelector('#daily:not(.hide)', { timeout: 10000 });
+  const dayBrand = (await solo.textContent('#dBrand')).trim();
+  check('daily screen opens with a brand', dayBrand.length > 1 && dayBrand !== '—', dayBrand);
+  check('daily hides the answer until you play',
+    !(await visible(solo, '#dResult')) && (await visible(solo, '#dPick')));
+  check('daily logo is on the stage', (await solo.locator('#dStage svg.logo').count()) === 1);
+
+  await rival.click('#btnDaily');
+  await rival.waitForSelector('#daily:not(.hide)', { timeout: 10000 });
+  check('everyone gets the same logo today',
+    (await rival.textContent('#dBrand')).trim() === dayBrand,
+    `${dayBrand} vs ${(await rival.textContent('#dBrand')).trim()}`);
+
+  await solo.fill('#dName', 'Zach');
+  await solo.locator('#dH').fill('40');
+  await solo.locator('#dS').fill('85');
+  await solo.locator('#dB').fill('95');
+  await solo.waitForTimeout(150);
+  const dBefore = await solo.locator('#dStage svg.logo').evaluate((el) =>
+    [...el.querySelectorAll('[fill]')].map((n) => n.getAttribute('fill')).join(','));
+  await solo.locator('#dH').fill('300');
+  await solo.waitForTimeout(150);
+  const dAfter = await solo.locator('#dStage svg.logo').evaluate((el) =>
+    [...el.querySelectorAll('[fill]')].map((n) => n.getAttribute('fill')).join(','));
+  check('daily logo re-tints with the sliders', dBefore !== dAfter);
+  await solo.locator('#dH').fill('40');
+  await solo.waitForTimeout(150);
+
+  await solo.click('#btnDailyLock');
+  await solo.waitForSelector('#dResult:not(.hide)', { timeout: 10000 });
+  const dScore = (await solo.textContent('#dScore')).trim();
+  check('daily guess is scored', /^\d+\.\d{2}$/.test(dScore), dScore);
+  check('daily reveal compares both colours',
+    (await solo.locator('#dTargetLogo svg.logo').count()) === 1 &&
+    (await solo.locator('#dMineLogo svg.logo').count()) === 1);
+  check('sliders are gone once you have played', !(await visible(solo, '#dPick')));
+  check('you appear on the daily board',
+    (await solo.locator('#dBoard .prow.me').count()) === 1);
+  await solo.screenshot({ path: `${SHOTS}/7-daily.png`, fullPage: true });
+
+  // Reload: the one-shot rule has to survive a fresh page, not just a disabled button.
+  await solo.reload();
+  await solo.waitForTimeout(400);
+  await solo.click('#btnDaily');
+  await solo.waitForSelector('#daily:not(.hide)', { timeout: 10000 });
+  check('a reload cannot buy a second attempt',
+    (await visible(solo, '#dResult')) && !(await visible(solo, '#dPick')));
+  check('the score survives the reload',
+    (await solo.textContent('#dScore')).trim() === dScore);
+
+  await rival.fill('#dName', 'Mia');
+  await rival.locator('#dH').fill('190');
+  await rival.click('#btnDailyLock');
+  await rival.waitForSelector('#dResult:not(.hide)', { timeout: 10000 });
+  const rows = await rival.locator('#dBoard .prow').count();
+  check('the board is shared between players', rows === 2, String(rows));
+  const names = (await rival.locator('#dBoard .nm').allTextContents()).join(' ');
+  check('both players are listed', /Zach/.test(names) && /Mia/.test(names), names);
+  const scores = (await rival.locator('#dBoard .sc').allTextContents()).map((t) => parseFloat(t));
+  check('the board is sorted best first', scores[0] >= scores[1], scores.join(' > '));
+  await rival.screenshot({ path: `${SHOTS}/8-daily-board.png`, fullPage: true });
+
   check('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(`\n${failures === 0 ? 'UI CHECKS PASSED' : failures + ' UI CHECK(S) FAILED'}`);
