@@ -233,18 +233,25 @@ async function main() {
   const spectator = await mk('spectator');
   await spectator.goto(BASE);
   await spectator.waitForTimeout(600);
+  check('today\'s board is on the daily tab',
+    (await spectator.locator('#secDaily #homeBoard').count()) === 1 &&
+    (await visible(spectator, '#dailyRank')));
+
   await spectator.click('#tabBoard');
-  await spectator.waitForTimeout(400);
-  check('the leaderboard has both sub-tabs',
+  await spectator.waitForTimeout(900);
+  check('the leaderboard tab has both sub-tabs',
     (await visible(spectator, '#tabToday')) && (await visible(spectator, '#tabAllTime')));
   check('today is the sub-tab you land on',
     (await visible(spectator, '#paneToday')) && !(await visible(spectator, '#paneAllTime')));
+  // Deliberately duplicated: the same standings on the daily tab and here.
+  const dailyRows = await spectator.locator('#homeBoard .prow').count();
+  const todayRows = await spectator.locator('#todayBoard .prow').count();
+  check('both copies of today\'s board agree', dailyRows === todayRows,
+    `${dailyRows} vs ${todayRows}`);
 
-  await spectator.click('#tabBoard');
-  await spectator.waitForTimeout(400);
   await spectator.click('#tabAllTime');
   await spectator.waitForTimeout(900);
-  check('the all-time tab opens',
+  check('the all-time sub-tab opens',
     (await visible(spectator, '#paneAllTime')) && !(await visible(spectator, '#paneToday')));
   const careerRows = await spectator.locator('#careerBoard .prow').count();
   check('the all-time board lists the players', careerRows === 2, String(careerRows));
@@ -388,14 +395,13 @@ async function main() {
   // Back on the home screen, the same standings should be waiting.
   await rival.click('#btnDailyHome');
   await rival.waitForSelector('#home:not(.hide)', { timeout: 10000 });
-  await rival.click('#tabBoard');
   await rival.waitForTimeout(900);
   check('home board fills in after playing',
     (await rival.locator('#homeBoard .prow').count()) === 2,
     String(await rival.locator('#homeBoard .prow').count()));
   check('home board marks you', (await rival.locator('#homeBoard .prow.me').count()) === 1);
-  check('home shows your standing', /#\d/.test(await rival.textContent('#homeRank')),
-    (await rival.textContent('#homeRank')).trim());
+  check('home shows your standing', /#\d/.test(await rival.textContent('#dailyRank')),
+    (await rival.textContent('#dailyRank')).trim());
   check('the daily button knows you have finished',
     /result/i.test(await rival.textContent('#btnDaily')),
     (await rival.textContent('#btnDaily')).trim());

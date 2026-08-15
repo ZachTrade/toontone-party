@@ -251,7 +251,18 @@
           scores add up — 30 is perfect.
         </p>
         <button id="btnDaily" class="wide">Play today's logos</button>
-        <p id="dailyStanding" class="tiny hide" style="text-align:center"></p>
+      </div>
+
+      <div class="card stack">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="font-size:15px">Today's leaderboard</h3>
+          <span id="dailyRank" class="pill">—</span>
+        </div>
+        <div id="homeBoard" class="plist"></div>
+        <p id="homeBoardEmpty" class="tiny hide" style="text-align:center">
+          Nobody's played today yet. Be first.
+        </p>
+        <p id="homeBoardMore" class="tiny hide" style="text-align:center"></p>
       </div>
     </div>
 
@@ -284,15 +295,17 @@
             <button id="tabToday" class="on">Today</button>
             <button id="tabAllTime">All-time</button>
           </div>
-          <span id="homeRank" class="pill">—</span>
+          <span id="boardRank" class="pill">—</span>
         </div>
 
+        <!-- The same standings as the daily tab, kept here so the leaderboard
+             is one place to find every board. -->
         <div id="paneToday" class="stack">
-          <div id="homeBoard" class="plist"></div>
-          <p id="homeBoardEmpty" class="tiny hide" style="text-align:center">
+          <div id="todayBoard" class="plist"></div>
+          <p id="todayBoardEmpty" class="tiny hide" style="text-align:center">
             Nobody's played today yet. Be first.
           </p>
-          <p id="homeBoardMore" class="tiny hide" style="text-align:center"></p>
+          <p id="todayBoardMore" class="tiny hide" style="text-align:center"></p>
         </div>
 
         <div id="paneAllTime" class="stack hide">
@@ -1195,34 +1208,34 @@
           ? `Continue — logo ${st.index + 1} of ${st.total}`
           : "Play today's logos";
 
-    if (boardTab === 'today') {
-      $('homeRank').textContent = st.myRank
-        ? `You're #${st.myRank}`
-        : st.players === 1 ? '1 player' : `${st.players} players`;
-    }
+    const standing = st.myRank
+      ? `You're #${st.myRank}`
+      : st.players === 1 ? '1 player' : `${st.players} players`;
+    $('dailyRank').textContent = standing;
+    if (boardTab === 'today') $('boardRank').textContent = standing;
 
     const top = st.board.slice(0, HOME_BOARD_ROWS);
-    $('homeBoard').innerHTML = top.map((r) => `
+    const rows = top.map((r) => `
       <div class="prow ${r.you ? 'me' : ''}">
         <span class="rank">${r.rank}</span>
         <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}
           ${r.done < st.total ? `<span class="tag">${r.done}/${st.total}</span>` : ''}</span>
         <span class="sc">${r.total.toFixed(2)}</span>
       </div>`).join('');
-    $('homeBoardEmpty').classList.toggle('hide', st.players > 0);
-
     const rest = st.players - top.length;
-    $('homeBoardMore').textContent = rest > 0 ? `+ ${rest} more` : '';
-    $('homeBoardMore').classList.toggle('hide', rest <= 0);
+    const more = rest > 0 ? `+ ${rest} more` : '';
 
-    // The board lives on its own tab now, so the daily tab carries just enough
-    // to be worth glancing at.
-    $('dailyStanding').textContent = st.myRank
-      ? `You're #${st.myRank} of ${st.players} today`
-      : st.players > 0
-        ? `${st.players} ${st.players === 1 ? 'person has' : 'people have'} played today`
-        : '';
-    $('dailyStanding').classList.toggle('hide', !$('dailyStanding').textContent);
+    // The same standings appear on the daily tab and under the leaderboard, so
+    // both copies are filled from one render.
+    for (const [board, empty, moreEl] of [
+      ['homeBoard', 'homeBoardEmpty', 'homeBoardMore'],
+      ['todayBoard', 'todayBoardEmpty', 'todayBoardMore'],
+    ]) {
+      $(board).innerHTML = rows;
+      $(empty).classList.toggle('hide', st.players > 0);
+      $(moreEl).textContent = more;
+      $(moreEl).classList.toggle('hide', !more);
+    }
   }
 
   /** Both boards change after a game, so they refresh together. */
@@ -1258,6 +1271,18 @@
     $(tab).addEventListener('click', () => showSection(name));
   }
 
+  function showBoardTab(which) {
+    boardTab = which;
+    $('tabToday').classList.toggle('on', which === 'today');
+    $('tabAllTime').classList.toggle('on', which === 'alltime');
+    $('paneToday').classList.toggle('hide', which !== 'today');
+    $('paneAllTime').classList.toggle('hide', which !== 'alltime');
+    refreshHome();
+  }
+
+  $('tabToday').addEventListener('click', () => showBoardTab('today'));
+  $('tabAllTime').addEventListener('click', () => showBoardTab('alltime'));
+
   // ---- all-time board: wins, points and medals across finished room games ----
   let boardTab = 'today';
   let careerCache = null;
@@ -1274,7 +1299,7 @@
       </div>`).join('');
     $('careerEmpty').classList.toggle('hide', st.players > 0);
     if (boardTab === 'alltime') {
-      $('homeRank').textContent = st.myRank
+      $('boardRank').textContent = st.myRank
         ? `You're #${st.myRank}`
         : st.players === 1 ? '1 player' : `${st.players} players`;
     }
@@ -1287,22 +1312,6 @@
     } catch { /* the rest of the home screen still works */ }
   }
 
-  function showBoardTab(which) {
-    boardTab = which;
-    $('tabToday').classList.toggle('on', which === 'today');
-    $('tabAllTime').classList.toggle('on', which === 'alltime');
-    $('paneToday').classList.toggle('hide', which !== 'today');
-    $('paneAllTime').classList.toggle('hide', which !== 'alltime');
-    if (which === 'alltime') {
-      if (careerCache) renderCareer(careerCache);
-      loadCareer();
-    } else {
-      loadHomeDaily();
-    }
-  }
-
-  $('tabToday').addEventListener('click', () => showBoardTab('today'));
-  $('tabAllTime').addEventListener('click', () => showBoardTab('alltime'));
 
   $('btnDaily').addEventListener('click', openDaily);
 

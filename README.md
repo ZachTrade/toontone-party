@@ -112,8 +112,8 @@ Boards are kept for three days.
 
 ## Home
 
-Three tabs rather than one long scroll: **Daily challenge**, **PVP** (create or join a
-room) and **Leaderboard**. The tab you were last on is remembered for the session, so
+Three tabs rather than one long scroll: **Daily challenge** (with today's standings
+under it), **PVP** (create or join a room) and **Leaderboard**. The tab you were last on is remembered for the session, so
 coming back from a game lands where you left off. The pitch at the top is onboarding
 copy — once you've claimed a name it disappears, leaving the tabs at the top of the
 screen.
@@ -121,7 +121,10 @@ screen.
 ## All-time board
 
 The **Leaderboard** tab holds both boards, as sub-tabs: **Today** (the daily challenge)
-and **All-time** — wins, points and games across finished room games.
+and **All-time** — wins, points and games across finished room games. Today's board
+deliberately appears in two places — under the daily challenge where it's immediately
+relevant, and here so the leaderboard is one place to find every board. Both copies are
+filled from a single render.
 
 **Points scale with the room.** In an N-player game first takes N points, second N-1,
 down to 1 for last. Winning a six-player room is worth more than winning a pair, and
