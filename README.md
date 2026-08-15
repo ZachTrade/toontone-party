@@ -37,10 +37,33 @@ Without them the API returns `503 not_configured` and the site shows a message s
 the database isn't connected. **Environment variables only take effect on a new
 deployment** — after adding them, redeploy.
 
+## Names
+
+Everyone claims a name once, locked with a 4-digit PIN, and it becomes their name
+everywhere — rooms and the daily board. Nothing asks you to type a name again, and
+nobody else can play as you.
+
+One form does both jobs: a free name is claimed with the PIN you give, a taken one has
+to match it. Signing in returns a token that the browser keeps for six months, and
+**names always come from that token, never from the request** — otherwise anyone could
+put anyone's name on the board.
+
+A 4-digit PIN is 10,000 possibilities, so:
+
+- PINs are stored as a salted PBKDF2 hash (120k rounds), never in the clear. That
+  doesn't make a 4-digit secret strong — it makes one leaked database expensive to
+  unpick rather than instant.
+- **A name locks for fifteen minutes after 8 wrong PINs**, which is the part that
+  actually stops guessing.
+
+This is a party game: it keeps friends from taking each other's names, and it isn't
+trying to survive a determined attacker.
+
 ## How a game runs
 
 1. Someone taps **Create a room** and gets a 4-character code plus a share link.
-2. Friends open the link (or type the code), pick a name, and appear in the lobby.
+2. Friends open the link (or type the code) and appear in the lobby under their
+   claimed name.
 3. The host starts. Each round gives everyone 45 seconds; the round ends early once
    every present player has locked in. **You don't have to hit the button** — when the
    timer runs out, whatever colour your sliders are on is locked in for you, so sitting
@@ -81,9 +104,8 @@ possible day is 30.00.
 The board ranks on the accumulated total and marks anyone still mid-run (`2/3`), so it
 reads honestly through the day.
 
-Identity is a random id in `localStorage`, so the board is per-browser and anyone can
-put any name on it. That's the right trade for a party game; it is not cheat-proof and
-isn't trying to be.
+Boards key on the claimed name, so the same person on a phone and a laptop is one
+player rather than two.
 
 Boards are kept for three days.
 
@@ -109,7 +131,7 @@ meaningless, so for those it neither carries weight nor scales anything. See
 | --- | --- |
 | `index.html` | The whole client — every screen, the sliders, the timer, polling |
 | `logos.js` | 91 real brand marks as re-tintable inline SVG (see below) |
-| `api/game.js` | The one API endpoint; `op` selects create / join / start / submit / state / daily / dailySubmit |
+| `api/game.js` | The one API endpoint; `op` selects identify / whoami / create / join / start / submit / state / daily / dailySubmit |
 | `api/_lib.js` | Redis client, colour maths, scoring, round building |
 | `api/_brands.js` | The brand list with official colours and difficulty tiers |
 | `tools/add-logos.js` | Merges SVGs from `tools/logos-src/` into `logos.js` (`npm run logos`) |
@@ -201,3 +223,7 @@ npm i -D playwright && npm run test:ui   # drives two real browsers through a fu
 (override with `SHOT_DIR`). It plays a full game, then sits out a whole 45-second round
 without touching the button to prove the timer locks a colour in — so allow it a couple
 of minutes.
+
+**Restart `npm run dev` before each `test:ui` run.** The stand-in Redis is in-memory and
+the dev server is long-lived, so a second run against the same server finds its players
+already claimed and their daily runs already finished.

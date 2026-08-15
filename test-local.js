@@ -105,6 +105,54 @@ async function main() {
       m.warnings.some((w) => /text/i.test(w)), m.warnings.join('; '));
   }
 
+  console.log('\n== names and pins ==');
+  const claim = await call('identify', { name: 'Zach', pin: '1234' });
+  check('a free name is claimed', claim.ok && claim.created && !!claim.token,
+    JSON.stringify(claim.error || ''));
+  const retake = await call('identify', { name: 'Zach', pin: '9999' });
+  check('the wrong pin cannot take a claimed name',
+    retake.error === 'wrong_pin' && !retake.token, JSON.stringify(retake));
+  const backIn = await call('identify', { name: 'Zach', pin: '1234' });
+  check('the right pin signs you back in',
+    backIn.ok && !backIn.created && backIn.name === 'Zach', JSON.stringify(backIn.error || ''));
+  const cased = await call('identify', { name: '  zACH ', pin: '1234' });
+  check('case and spacing are the same name', cased.ok && cased.name === 'Zach', JSON.stringify(cased));
+  check('a token resolves to its name',
+    (await call('whoami', { token: claim.token })).name === 'Zach');
+  check('a junk token resolves to nobody',
+    (await call('whoami', { token: 'not-a-real-token' })).error === 'no_identity');
+  check('names are validated', (await call('identify', { name: 'a', pin: '1234' })).error === 'bad_name');
+  check('names cannot contain the key separator',
+    (await call('identify', { name: 'ba#d', pin: '1234' })).error === 'bad_name');
+  check('pins must be four digits',
+    (await call('identify', { name: 'Someone', pin: '12' })).error === 'bad_pin_format');
+  // 10,000 PINs is walkable, so wrong guesses have to run out.
+  for (let i = 0; i < 8; i++) await call('identify', { name: 'Zach', pin: '0000' });
+  const locked = await call('identify', { name: 'Zach', pin: '0000' });
+  check('a name locks out after repeated wrong pins', locked.error === 'locked_out',
+    JSON.stringify(locked));
+  check('the lockout holds even for the right pin',
+    (await call('identify', { name: 'Zach', pin: '1234' })).error === 'locked_out');
+  // The pin must never be recoverable from what is stored.
+  const stored = JSON.parse(require('./fake-redis.js').store.get('tt:u:zach').v);
+  check('the pin is not stored in the clear',
+    !JSON.stringify(stored).includes('1234') && !!stored.salt && stored.hash.length === 64,
+    Object.keys(stored).join(','));
+
+  const mia = await call('identify', { name: 'Mia', pin: '4321' });
+  check('a second player claims their own name', mia.ok && mia.created);
+
+  // Names now come from the token, so nobody can play as somebody else by
+  // simply typing their name into the request.
+  check('a room cannot be created without a name',
+    (await call('create', {})).error === 'no_identity');
+  check('a self-declared name is not accepted',
+    (await call('create', { name: 'Zach' })).error === 'no_identity');
+  check('the daily cannot be played without a name',
+    (await call('dailySubmit', { h: 1, s: 1, b: 1 })).error === 'no_identity');
+  check('the daily board is public even signed out',
+    (await call('daily', {})).ok === true);
+
   console.log('\n== daily challenge ==');
   const { dayKey, dailyPrompts, DAILY_LOGOS } = require('./api/_lib.js');
   // Everyone has to get the same logos, so nothing here may depend on when or
@@ -139,14 +187,15 @@ async function main() {
     dayKey(Date.UTC(2026, 7, 15, 17, 0)) === '2026-08-16',
     dayKey(Date.UTC(2026, 7, 15, 17, 0)));
 
-  const dA = await call('daily', { pid: 'aaa' });
+  const zt = claim.token, mt = mia.token;
+  const dA = await call('daily', { token: zt });
   check('daily state loads', dA.ok && !!dA.prompt.brand, JSON.stringify(dA.error || ''));
   check('run starts at the first logo', dA.index === 0 && dA.total === DAILY_LOGOS && !dA.finished);
   check('no answers leak before you play',
     dA.results.length === 0 && !dA.prompt.emoji && dA.myTotal === 0);
   check('board starts empty', dA.players === 0 && dA.board.length === 0);
 
-  const first = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 40, s: 80, b: 90 });
+  const first = await call('dailySubmit', { token: zt, h: 40, s: 80, b: 90 });
   check('first guess scored', typeof first.results[0].mine.score === 'number',
     JSON.stringify(first.error || ''));
   check('the run advances', first.index === 1 && !first.finished);
@@ -155,11 +204,11 @@ async function main() {
   check('the next logo arrives without its answer',
     !!first.prompt.brand && !first.prompt.emoji);
 
-  const midRetry = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 111, s: 11, b: 11 });
+  const midRetry = await call('dailySubmit', { token: zt, h: 111, s: 11, b: 11 });
   check('a resubmit answers the next logo, never rewrites the last',
     midRetry.results[0].mine.h === 40 && midRetry.index === 2, JSON.stringify(midRetry.index));
 
-  const done = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 200, s: 60, b: 60 });
+  const done = await call('dailySubmit', { token: zt, h: 200, s: 60, b: 60 });
   check('three logos finishes the run', done.finished && done.index === DAILY_LOGOS);
   check('no further prompt once finished', !done.prompt);
   const summed = done.results.reduce((t, r) => t + r.mine.score, 0);
@@ -168,15 +217,15 @@ async function main() {
   check('you land on the board with the run total',
     done.players === 1 && done.myRank === 1 && done.board[0].done === DAILY_LOGOS);
 
-  const extra = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 0, s: 0, b: 0 });
+  const extra = await call('dailySubmit', { token: zt, h: 0, s: 0, b: 0 });
   check('a fourth guess is refused', extra.already === true && extra.myTotal === done.myTotal);
 
   // Deliberately awful guesses, so the ordering is unambiguous.
   for (let i = 0; i < DAILY_LOGOS; i++) {
     const t = done.results[i].target;
-    await call('dailySubmit', { pid: 'bbb', name: 'Mia', h: (t.h + 180) % 360, s: 5, b: 5 });
+    await call('dailySubmit', { token: mt, h: (t.h + 180) % 360, s: 5, b: 5 });
   }
-  const dBoard = await call('daily', { pid: 'bbb' });
+  const dBoard = await call('daily', { token: mt });
   check('board ranks by accumulated score',
     dBoard.board[0].name === 'Zach' && dBoard.board[1].name === 'Mia',
     dBoard.board.map((r) => r.name + ':' + r.total).join(', '));
@@ -185,24 +234,26 @@ async function main() {
   check('board shows how far each player got',
     dBoard.board.every((r) => r.done === DAILY_LOGOS));
   check('a player with no guess is off the board',
-    (await call('daily', { pid: 'ccc' })).myRank === null);
+    (await call('daily', {})).myRank === null);
 
   // Half-finished runs still show, so the board reads honestly mid-day.
-  await call('dailySubmit', { pid: 'ddd', name: 'Sam', h: 10, s: 50, b: 50 });
-  const partial = await call('daily', { pid: 'ddd' });
+  const sam = await call('identify', { name: 'Sam', pin: '5555' });
+  await call('dailySubmit', { token: sam.token, h: 10, s: 50, b: 50 });
+  const partial = await call('daily', { token: sam.token });
   check('a partial run shows its progress',
     partial.board.find((r) => r.you).done === 1, JSON.stringify(partial.board));
 
   console.log('\n== room flow ==');
-  const host = await call('create', { name: 'Zach' });
+  const host = await call('create', { token: zt });
   check('room created', !!host.code && !!host.pid, JSON.stringify(host));
   const code = host.code;
 
-  const p2 = await call('join', { code, name: 'Mia' });
-  const p3 = await call('join', { code, name: 'Ken' });
+  const ken = await call('identify', { name: 'Ken', pin: '7777' });
+  const p2 = await call('join', { code, token: mt });
+  const p3 = await call('join', { code, token: ken.token });
   check('two friends joined', !!p2.pid && !!p3.pid, JSON.stringify([p2, p3]));
 
-  const bad = await call('join', { code: 'ZZZZ', name: 'Nobody' });
+  const bad = await call('join', { code: 'ZZZZ', token: zt });
   check('unknown code rejected', bad.error === 'no_room', JSON.stringify(bad));
 
   let st = await call('state', { code, pid: host.pid });

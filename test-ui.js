@@ -13,6 +13,14 @@ function check(label, cond, detail) {
 
 const visible = (page, sel) => page.locator(sel).isVisible();
 
+/** Claim a name + PIN on the home screen; it becomes the name everywhere. */
+async function signIn(page, name, pin) {
+  await page.fill('#idName', name);
+  await page.fill('#idPin', pin);
+  await page.click('#btnIdentify');
+  await page.waitForSelector('#idWho:not(.hide)', { timeout: 10000 });
+}
+
 async function main() {
   require('fs').mkdirSync(SHOTS, { recursive: true });
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -21,7 +29,14 @@ async function main() {
     const ctx = await browser.newContext({ viewport: { width: 400, height: 860 }, deviceScaleFactor: 2 });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => { errors.push(`${label}: ${e.message}`); });
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(`${label} console: ${m.text()}`); });
+    page.on('console', (m) => {
+      if (m.type() !== 'error') return;
+      // A 4xx from our own API is a handled outcome the UI reports itself —
+      // a refused PIN, a dead room code. Chrome logs every failed fetch as a
+      // console error regardless, so those would drown out real exceptions.
+      if (/Failed to load resource/i.test(m.text())) return;
+      errors.push(`${label} console: ${m.text()}`);
+    });
     return page;
   };
 
@@ -45,8 +60,50 @@ async function main() {
     (await host.textContent('#homeDay')).trim());
   await host.screenshot({ path: `${SHOTS}/1-home.png`, fullPage: true });
 
+  // ---- identity ----
+  check('the claim form is shown when signed out', await visible(host, '#idCard'));
+  check('nothing is playable until a name is claimed',
+    (await host.locator('#btnCreate').isDisabled()) &&
+    (await host.locator('#btnJoin').isDisabled()) &&
+    (await host.locator('#btnDaily').isDisabled()));
+  check('no name box on the create-room card',
+    (await host.locator('#home input#name').count()) === 0);
+
+  await host.fill('#idName', 'Zach');
+  await host.fill('#idPin', '12');
+  await host.click('#btnIdentify');
+  await host.waitForTimeout(600);
+  check('a short pin is refused', await visible(host, '#idErr'),
+    (await host.textContent('#idErr')).trim());
+
+  await signIn(host, 'Zach', '1234');
+  check('the claim form gives way to who you are', !(await visible(host, '#idCard')));
+  check('the name is shown back to you',
+    (await host.textContent('#idWhoName')).trim() === 'Zach');
+  check('claiming a name unlocks the game',
+    !(await host.locator('#btnCreate').isDisabled()));
+  await host.screenshot({ path: `${SHOTS}/0-identity.png`, fullPage: true });
+
+  // A different browser must not be able to take a claimed name.
+  const impostor = await mk('impostor');
+  await impostor.goto(BASE);
+  await impostor.waitForTimeout(300);
+  await impostor.fill('#idName', 'Zach');
+  await impostor.fill('#idPin', '0000');
+  await impostor.click('#btnIdentify');
+  await impostor.waitForTimeout(800);
+  check('a claimed name cannot be taken with the wrong pin',
+    (await visible(impostor, '#idErr')) && (await visible(impostor, '#idCard')),
+    (await impostor.textContent('#idErr')).trim());
+  await impostor.close();
+
+  // The sign-in has to outlive a reload, or nobody stays signed in.
+  await host.reload();
+  await host.waitForTimeout(800);
+  check('the name survives a reload',
+    !(await visible(host, '#idCard')) && (await host.textContent('#idWhoName')).trim() === 'Zach');
+
   // ---- create room ----
-  await host.fill('#name', 'Zach');
   await host.click('#btnCreate');
   await host.waitForSelector('#lobby:not(.hide)', { timeout: 10000 });
   const code = (await host.textContent('#lobbyCode')).trim();
@@ -55,13 +112,17 @@ async function main() {
   // ---- guest joins via link ----
   await guest.goto(`${BASE}/?r=${code}`);
   await guest.waitForTimeout(300);
-  await guest.fill('#name', 'Mia');
+  await signIn(guest, 'Mia', '4321');
   await guest.click('#btnJoin');
   await guest.waitForSelector('#lobby:not(.hide)', { timeout: 10000 });
 
   await host.waitForTimeout(1800);
   const lobbyRows = await host.locator('#lobbyList .prow').count();
   check('both players in lobby', lobbyRows === 2, String(lobbyRows));
+  // Names come from the claimed account, not from anything typed in the room.
+  const lobbyNames = (await host.locator('#lobbyList .nm').allTextContents()).join(' ');
+  check('the lobby uses the claimed names',
+    /Zach/.test(lobbyNames) && /Mia/.test(lobbyNames), lobbyNames.replace(/\s+/g, ' ').trim());
   check('host sees start button', await visible(host, '#btnStart'));
   check('guest sees waiting text', await visible(guest, '#waitHost'));
   check('guest has no start button', !(await visible(guest, '#btnStart')));
@@ -185,6 +246,8 @@ async function main() {
   await rival.goto(BASE);
   await solo.waitForTimeout(300);
 
+  await signIn(solo, 'Sam', '5555');
+  await signIn(rival, 'Ada', '6666');
   await solo.click('#btnDaily');
   await solo.waitForSelector('#daily:not(.hide)', { timeout: 10000 });
   const dayBrand = (await solo.textContent('#dBrand')).trim();
@@ -199,7 +262,6 @@ async function main() {
     (await rival.textContent('#dBrand')).trim() === dayBrand,
     `${dayBrand} vs ${(await rival.textContent('#dBrand')).trim()}`);
 
-  await solo.fill('#dName', 'Zach');
   await solo.locator('#dH').fill('40');
   await solo.locator('#dS').fill('85');
   await solo.locator('#dB').fill('95');
@@ -258,7 +320,6 @@ async function main() {
   check('the total survives the reload', (await solo.textContent('#dTotal')).trim() === totalTxt);
 
   // A second player, deliberately worse, to prove the board accumulates and ranks.
-  await rival.fill('#dName', 'Mia');
   for (let i = 1; i <= 3; i++) {
     await rival.locator('#dH').fill('200');
     await rival.locator('#dS').fill('5');
@@ -271,7 +332,7 @@ async function main() {
   const rows = await rival.locator('#dBoard .prow').count();
   check('the board is shared between players', rows === 2, String(rows));
   const names = (await rival.locator('#dBoard .nm').allTextContents()).join(' ');
-  check('both players are listed', /Zach/.test(names) && /Mia/.test(names), names);
+  check('both players are listed', /Sam/.test(names) && /Ada/.test(names), names);
   const scores = (await rival.locator('#dBoard .sc').allTextContents()).map((t) => parseFloat(t));
   check('the board ranks on accumulated score', scores[0] >= scores[1], scores.join(' > '));
   check('the board totals a whole run, not one logo',

@@ -20,6 +20,17 @@ function run(args) {
     }
     case 'EXPIRE':
       return store.has(key) ? 1 : 0;
+    case 'DEL': {
+      const had = store.has(key);
+      store.delete(key);
+      return had ? 1 : 0;
+    }
+    case 'INCR': {
+      const e = store.get(key);
+      const next = (e && e.type === 'str' ? Number(e.v) || 0 : 0) + 1;
+      store.set(key, { type: 'str', v: String(next) });
+      return next;
+    }
     case 'HSET': {
       const e = store.get(key) || { type: 'hash', v: new Map() };
       e.v.set(String(args[2]), String(args[3]));

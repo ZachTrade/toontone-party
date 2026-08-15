@@ -10,6 +10,13 @@ const {
   dayKey,
   dailyPrompts,
   DAILY_LOGOS,
+  nameKey,
+  validName,
+  validPin,
+  hashPin,
+  newSalt,
+  newToken,
+  sameHash,
 } = require('./_lib.js');
 
 const GUESS_MS = 45000; // time to lock in a colour
@@ -24,9 +31,16 @@ const DAILY_BOARD_MAX = 100; // how much of the board to send down
 
 // Bump to abandon every stored daily board and start them empty. The old keys
 // are simply orphaned and expire on their own TTL. Bumped once to clear a day
-// of test scores.
-const DAILY_EPOCH = 2;
+// of test scores, and again when boards moved from per-browser ids to accounts.
+const DAILY_EPOCH = 3;
 
+const TOKEN_TTL = 180 * 24 * 3600; // a sign-in lasts about six months
+const PIN_TRIES = 8; // wrong PINs allowed before a name locks out
+const PIN_LOCK_TTL = 900; // ...for fifteen minutes
+
+const kUser = (n) => `tt:u:${n}`;
+const kToken = (t) => `tt:t:${t}`;
+const kPinFails = (n) => `tt:pf:${n}`;
 const kRoom = (c) => `tt:${c}`;
 const kDaily = (d) => `tt:d${DAILY_EPOCH}:${d}`;
 const kDailyPrompt = (d) => `tt:d${DAILY_EPOCH}:${d}:p`;
@@ -264,7 +278,9 @@ async function getState(code, pid, touch) {
 // ------------------------------------------------------------------ ops
 
 async function opCreate(body) {
-  const name = clean(body.name, 16) || 'Player';
+  const who = await accountFor(body.token);
+  if (!who) return { error: 'no_identity' };
+  const name = who.name;
   let code = null;
   for (let i = 0; i < 6; i++) {
     const candidate = randomCode(4);
@@ -299,7 +315,9 @@ async function opCreate(body) {
 
 async function opJoin(body) {
   const code = clean(body.code, 8).toUpperCase();
-  const name = clean(body.name, 16) || 'Player';
+  const who = await accountFor(body.token);
+  if (!who) return { error: 'no_identity' };
+  const name = who.name;
   const room = await loadRoom(code);
   if (!room || !room.code) return { error: 'no_room' };
 
@@ -389,6 +407,81 @@ async function opSubmit(body) {
   return { ok: true, score };
 }
 
+// ------------------------------------------------------------------ identity
+
+const parseJson = (raw) => {
+  if (!raw) return null;
+  try {
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Claim a name, or sign back into one you already own.
+ *
+ * One op rather than separate sign-up and sign-in: a free name is claimed with
+ * the PIN given, a taken one has to match. That keeps it to a single form, and
+ * means nobody can quietly take a name that's already someone's.
+ */
+async function opIdentify(body) {
+  const name = clean(body.name, 16).replace(/\s+/g, ' ');
+  const pin = clean(body.pin, 8);
+  if (!validName(name)) return { error: 'bad_name' };
+  if (!validPin(pin)) return { error: 'bad_pin_format' };
+
+  const key = nameKey(name);
+  const existing = parseJson(await cmd('GET', kUser(key)));
+
+  if (!existing) {
+    const salt = newSalt();
+    const account = { name, salt, hash: hashPin(pin, salt), created: Date.now() };
+    // NX so two people claiming the same name at once can't both win.
+    const won = await cmd('SET', kUser(key), JSON.stringify(account), 'NX');
+    if (!won) return { error: 'name_taken' };
+    const token = newToken();
+    await cmd('SET', kToken(token), key, 'EX', String(TOKEN_TTL));
+    return { ok: true, token, name, created: true };
+  }
+
+  // 10,000 PINs is walkable in seconds, so a name locks itself after a few
+  // wrong tries rather than relying on the PIN alone.
+  const fails = Number(await cmd('GET', kPinFails(key))) || 0;
+  if (fails >= PIN_TRIES) return { error: 'locked_out' };
+
+  if (!sameHash(hashPin(pin, existing.salt), existing.hash)) {
+    const now = await cmd('INCR', kPinFails(key));
+    if (Number(now) === 1) await cmd('EXPIRE', kPinFails(key), String(PIN_LOCK_TTL));
+    return { error: 'wrong_pin', triesLeft: Math.max(0, PIN_TRIES - Number(now)) };
+  }
+
+  await cmd('DEL', kPinFails(key));
+  const token = newToken();
+  await cmd('SET', kToken(token), key, 'EX', String(TOKEN_TTL));
+  return { ok: true, token, name: existing.name, created: false };
+}
+
+/** The account behind a token, or null. Names always come from here, never
+    from the request — otherwise anyone could play as anyone. */
+async function accountFor(token) {
+  const t = clean(token, 64);
+  if (!t) return null;
+  const key = await cmd('GET', kToken(t));
+  if (!key) return null;
+  const account = parseJson(await cmd('GET', kUser(String(key))));
+  if (!account) return null;
+  // Sliding expiry, so regular players are never signed out.
+  await cmd('EXPIRE', kToken(t), String(TOKEN_TTL));
+  return { id: String(key), name: account.name };
+}
+
+async function opWhoami(body) {
+  const who = await accountFor(body.token);
+  if (!who) return { error: 'no_identity' };
+  return { ok: true, name: who.name };
+}
+
 // ------------------------------------------------------------------ daily
 
 /**
@@ -455,8 +548,10 @@ function dailyBoard(entries, pid) {
   };
 }
 
-async function opDaily(body) {
-  const pid = clean(body.pid, 32);
+/** The day's state as one account sees it. `who` may be null — the board is
+    public, so the home screen can show it before anyone signs in. */
+async function dailyState(who) {
+  const pid = who ? who.id : '';
   const day = dayKey();
   const prompts = await loadDailyPrompts(day);
   const entries = parsePlayers(await cmd('HGETALL', kDaily(day)));
@@ -497,13 +592,18 @@ async function opDaily(body) {
   return out;
 }
 
+async function opDaily(body) {
+  return dailyState(await accountFor(body.token));
+}
+
 async function opDailySubmit(body) {
-  const pid = clean(body.pid, 32);
-  const name = clean(body.name, 16) || 'Player';
+  const who = await accountFor(body.token);
+  if (!who) return { error: 'no_identity' };
+  const pid = who.id;
+  const name = who.name;
   const h = num(body.h, 0, 359);
   const s = num(body.s, 0, 100);
   const b = num(body.b, 0, 100);
-  if (!pid) return { error: 'bad_player' };
   if (h == null || s == null || b == null) return { error: 'bad_guess' };
 
   const day = dayKey();
@@ -515,7 +615,7 @@ async function opDailySubmit(body) {
   let index = 0;
   while (index < prompts.length && entries[dailyField(pid, index)]) index++;
   if (index >= prompts.length) {
-    const done = await opDaily({ pid });
+    const done = await dailyState(who);
     return { ...done, already: true };
   }
 
@@ -528,7 +628,7 @@ async function opDailySubmit(body) {
   const first = await cmd('HSETNX', kDaily(day), dailyField(pid, index), entry);
   if (first) await cmd('EXPIRE', kDaily(day), String(DAILY_TTL));
 
-  const state = await opDaily({ pid });
+  const state = await dailyState(who);
   return { ...state, already: !first };
 }
 
@@ -578,6 +678,12 @@ module.exports = async (req, res) => {
         break;
       case 'submit':
         result = await opSubmit(body);
+        break;
+      case 'identify':
+        result = await opIdentify(body);
+        break;
+      case 'whoami':
+        result = await opWhoami(body);
         break;
       case 'daily':
         result = await opDaily(body);

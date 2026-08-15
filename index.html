@@ -202,6 +202,31 @@
       </p>
     </div>
 
+    <div class="card stack" id="idCard">
+      <p class="muted" style="font-weight:700;color:var(--text)">Claim your name</p>
+      <p class="tiny">
+        Pick a name and lock it with a 4-digit PIN. Nobody else can play as you,
+        and you won't have to type it again.
+      </p>
+      <input id="idName" type="text" maxlength="16" placeholder="Your name" autocomplete="username" />
+      <input id="idPin" class="code" type="text" inputmode="numeric" maxlength="4"
+             placeholder="PIN" autocomplete="current-password" spellcheck="false" />
+      <button id="btnIdentify" class="wide">Save my name</button>
+      <p class="tiny" style="text-align:center">
+        Already claimed it? Same name and PIN signs you back in.
+      </p>
+      <p id="idErr" class="err hide" style="text-align:center"></p>
+    </div>
+
+    <div class="card stack hide" id="idWho">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <span class="nm" style="font-weight:800;font-size:17px">
+          Playing as <span id="idWhoName">—</span>
+        </span>
+        <button id="btnSignOut" class="ghost" style="padding:9px 13px;font-size:13px">Not you?</button>
+      </div>
+    </div>
+
     <div class="card stack">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <p class="muted" style="font-weight:700;color:var(--text)">Daily challenge</p>
@@ -227,7 +252,6 @@
     </div>
 
     <div class="card stack">
-      <input id="name" type="text" maxlength="16" placeholder="Your name" autocomplete="nickname" />
       <button id="btnCreate" class="wide">Create a room</button>
       <p class="tiny" style="text-align:center">You'll get a code and a link to share.</p>
     </div>
@@ -271,7 +295,6 @@
           <input id="dB" type="range" min="0" max="100" value="80" />
         </div>
       </div>
-      <input id="dName" type="text" maxlength="16" placeholder="Your name" autocomplete="nickname" />
       <button id="btnDailyLock" class="wide">Lock it in</button>
       <p id="dHint" class="tiny" style="text-align:center">
         Three logos, one shot each. Your scores add up.
@@ -510,30 +533,25 @@
     return res.json();
   }
 
+  // Falls back to memory when storage is blocked (private mode), so the page
+  // still works for one session — it just won't be remembered.
+  let memToken = '';
+  let memName = '';
+
   const store = {
-    get name() { try { return localStorage.getItem('tt_name') || ''; } catch { return ''; } },
-    set name(v) { try { localStorage.setItem('tt_name', v); } catch {} },
+    get name() { try { return localStorage.getItem('tt_name') || memName; } catch { return memName; } },
+    set name(v) { memName = v; try { localStorage.setItem('tt_name', v); } catch {} },
+    get token() { try { return localStorage.getItem('tt_token') || memToken; } catch { return memToken; } },
+    set token(v) {
+      memToken = v;
+      try {
+        if (v) localStorage.setItem('tt_token', v);
+        else localStorage.removeItem('tt_token');
+      } catch {}
+    },
     pid(code) { try { return localStorage.getItem('tt_pid_' + code) || ''; } catch { return ''; } },
     setPid(code, pid) { try { localStorage.setItem('tt_pid_' + code, pid); } catch {} },
-    /** One identity per browser for the daily board, made on first play. */
-    dailyPid() {
-      try {
-        let id = localStorage.getItem('tt_daily_pid');
-        if (!id) {
-          id = '';
-          for (let i = 0; i < 16; i++) id += Math.floor(Math.random() * 16).toString(16);
-          localStorage.setItem('tt_daily_pid', id);
-        }
-        return id;
-      } catch {
-        // Private mode with storage blocked — still playable, just not
-        // remembered, so a reload looks like a new player.
-        return dailyFallbackPid;
-      }
-    },
   };
-  let dailyFallbackPid = '';
-  for (let i = 0; i < 16; i++) dailyFallbackPid += Math.floor(Math.random() * 16).toString(16);
 
   // ---------------------------------------------------------------- state
   const me = { code: '', pid: '', name: '' };
@@ -829,22 +847,79 @@
     startPoll();
   }
 
-  // ---------------------------------------------------------------- actions
-  function nameValue() {
-    const v = $('name').value.trim();
-    return v || 'Player ' + Math.floor(Math.random() * 90 + 10);
+  // ---------------------------------------------------------------- identity
+  /** Reflect whether we're signed in: the claim form or the "playing as" row,
+      and whether the things that need a name are usable yet. */
+  function renderIdentity() {
+    const signedIn = !!store.token && !!store.name;
+    $('idCard').classList.toggle('hide', signedIn);
+    $('idWho').classList.toggle('hide', !signedIn);
+    $('idWhoName').textContent = store.name;
+    for (const id of ['btnCreate', 'btnJoin', 'btnDaily']) $(id).disabled = !signedIn;
   }
 
+  const IDENTITY_ERRORS = {
+    bad_name: 'Names are 2–16 characters: letters, numbers, spaces, - and _.',
+    bad_pin_format: 'The PIN has to be exactly 4 digits.',
+    wrong_pin: 'That name is taken and the PIN doesn’t match.',
+    locked_out: 'Too many wrong PINs. Try again in fifteen minutes.',
+    name_taken: 'Somebody just claimed that name. Pick another.',
+  };
+
+  async function identify() {
+    const name = $('idName').value.trim();
+    const pin = $('idPin').value.trim();
+    $('idErr').classList.add('hide');
+    $('btnIdentify').disabled = true;
+    try {
+      const r = await api('identify', { name, pin });
+      if (r.error) {
+        $('idErr').textContent = IDENTITY_ERRORS[r.error] || 'That didn’t work. Try again.';
+        $('idErr').classList.remove('hide');
+        return;
+      }
+      store.token = r.token;
+      store.name = r.name;
+      $('idPin').value = '';
+      renderIdentity();
+      loadHomeDaily();
+      toast(r.created ? `${r.name} is yours` : `Welcome back, ${r.name}`);
+    } catch {
+      $('idErr').textContent = 'Network trouble. Try again.';
+      $('idErr').classList.remove('hide');
+    } finally {
+      $('btnIdentify').disabled = false;
+    }
+  }
+
+  $('btnIdentify').addEventListener('click', identify);
+  $('idPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') identify(); });
+  $('idName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('idPin').focus(); });
+
+  $('btnSignOut').addEventListener('click', () => {
+    store.token = '';
+    store.name = '';
+    $('idName').value = '';
+    $('idPin').value = '';
+    renderIdentity();
+    loadHomeDaily();
+  });
+
+  // ---------------------------------------------------------------- actions
   $('btnCreate').addEventListener('click', async () => {
     $('btnCreate').disabled = true;
     try {
-      const r = await api('create', { name: nameValue() });
+      const r = await api('create', { token: store.token });
       if (r.error) throw new Error(r.error);
       enterRoom(r.code, r.pid, r.name);
     } catch (e) {
-      $('homeErr').textContent = String(e && e.message) === 'not_configured'
-        ? 'The game database isn’t connected yet. Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in the Vercel project settings, then redeploy.'
-        : "Couldn't create a room. Try again in a moment.";
+      const why = String(e && e.message);
+      $('homeErr').textContent =
+        why === 'not_configured'
+          ? 'The game database isn’t connected yet. Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in the Vercel project settings, then redeploy.'
+          : why === 'no_identity'
+            ? 'Claim a name first — it becomes your name in the room.'
+            : "Couldn't create a room. Try again in a moment.";
       $('homeErr').classList.remove('hide');
     } finally {
       $('btnCreate').disabled = false;
@@ -860,11 +935,12 @@
     }
     $('btnJoin').disabled = true;
     try {
-      const r = await api('join', { code, name: nameValue(), pid: store.pid(code) });
+      const r = await api('join', { code, token: store.token, pid: store.pid(code) });
       if (r.error) {
         $('homeErr').textContent =
           r.error === 'full' ? 'That room is full (12 players max).' :
           r.error === 'no_room' ? "No room with that code — check it, or it may have expired." :
+          r.error === 'no_identity' ? 'Claim a name first — it becomes your name in the room.' :
           'Something went wrong. Try again.';
         $('homeErr').classList.remove('hide');
         return;
@@ -879,7 +955,6 @@
   }
   $('btnJoin').addEventListener('click', () => join($('code').value));
   $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') join($('code').value); });
-  $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnCreate').click(); });
 
   $('btnStart').addEventListener('click', async () => {
     $('btnStart').disabled = true;
@@ -1020,7 +1095,7 @@
 
   async function refreshDaily() {
     try {
-      const st = await api('daily', { pid: store.dailyPid() });
+      const st = await api('daily', { token: store.token });
       if (!st.error) renderDaily(st);
     } catch {
       /* transient — the next tick retries */
@@ -1033,9 +1108,8 @@
     stopPoll();
     $('btnDaily').disabled = true;
     try {
-      const st = await api('daily', { pid: store.dailyPid() });
+      const st = await api('daily', { token: store.token });
       if (st.error) throw new Error(st.error);
-      $('dName').value = store.name || $('name').value.trim();
       dailyShowing = -1; // resume on the picker, not on an old reveal
       show('daily');
       renderDaily(st);
@@ -1058,11 +1132,13 @@
       you see rather than something you have to go looking for. */
   function renderHomeDaily(st) {
     $('homeDay').textContent = st.day;
-    $('btnDaily').textContent = st.finished
-      ? "See today's result"
-      : st.index > 0
-        ? `Continue — logo ${st.index + 1} of ${st.total}`
-        : "Play today's logos";
+    $('btnDaily').textContent = !store.token
+      ? 'Claim a name to play'
+      : st.finished
+        ? "See today's result"
+        : st.index > 0
+          ? `Continue — logo ${st.index + 1} of ${st.total}`
+          : "Play today's logos";
 
     $('homeRank').textContent = st.myRank
       ? `You're #${st.myRank}`
@@ -1085,7 +1161,7 @@
 
   async function loadHomeDaily() {
     try {
-      const st = await api('daily', { pid: store.dailyPid() });
+      const st = await api('daily', { token: store.token });
       if (!st.error) renderHomeDaily(st);
     } catch {
       // Leave the placeholders be — the home screen still works without it.
@@ -1101,16 +1177,8 @@
     $('dErr').classList.add('hide');
     const answering = dailyState ? dailyState.index : 0;
     try {
-      // The daily board is public, so the name is set here rather than being
-      // inherited from a room screen the player may never have seen.
-      const name = $('dName').value.trim() || store.name || 'Player ' + Math.floor(Math.random() * 90 + 10);
-      const st = await api('dailySubmit', {
-        pid: store.dailyPid(),
-        name,
-        ...dPicker.value(),
-      });
+      const st = await api('dailySubmit', { token: store.token, ...dPicker.value() });
       if (st.error) throw new Error(st.error);
-      store.name = name;
       dailyShowing = answering;
       renderDaily(st);
       if (st.already) toast("You'd already finished today's run");
@@ -1171,14 +1239,27 @@
   $('btnHome').addEventListener('click', () => goHome());
 
   // ---------------------------------------------------------------- boot
-  $('name').value = store.name;
+  renderIdentity();
+
+  // A stored token can be expired or from a wiped database, so confirm it with
+  // the server rather than trusting localStorage to still mean something.
+  if (store.token) {
+    api('whoami', { token: store.token })
+      .then((r) => {
+        if (r && r.name) store.name = r.name;
+        else { store.token = ''; store.name = ''; }
+        renderIdentity();
+        loadHomeDaily();
+      })
+      .catch(() => { /* offline — keep what we have and let actions retry */ });
+  }
+
   const fromUrl = new URLSearchParams(location.search).get('r');
   if (fromUrl) {
     const code = fromUrl.trim().toUpperCase().slice(0, 4);
     $('code').value = code;
-    const known = store.pid(code);
-    if (known && store.name) join(code);
-    else toast('Enter your name, then tap Join');
+    if (store.token && store.pid(code)) join(code);
+    else if (!store.token) toast('Claim a name, then tap Join');
   }
   loadHomeDaily();
   document.addEventListener('visibilitychange', () => {

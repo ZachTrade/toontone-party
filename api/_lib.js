@@ -228,6 +228,52 @@ function dailyPrompts(key, count) {
   return out;
 }
 
+// ---------------------------------------------------------------- identity
+
+const crypto = require('crypto');
+
+// '#' and ':' are Redis key separators here, so they can't appear in a name.
+const NAME_RE = /^[A-Za-z0-9 _-]{2,16}$/;
+const PIN_RE = /^\d{4}$/;
+
+/** The key a name is claimed under — case and spacing don't make a new player. */
+function nameKey(name) {
+  return String(name == null ? '' : name).trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function validName(name) {
+  return NAME_RE.test(String(name == null ? '' : name).trim().replace(/\s+/g, ' '));
+}
+
+const validPin = (pin) => PIN_RE.test(String(pin == null ? '' : pin));
+
+/**
+ * A four-digit PIN is only 10,000 possibilities, so the stored form has to be
+ * expensive to test and salted per player — otherwise one dump of the database
+ * hands over every account at once. This doesn't make a 4-digit secret strong;
+ * it makes guessing it cost something. The real defence is the attempt limit in
+ * game.js.
+ */
+function hashPin(pin, salt) {
+  return crypto.pbkdf2Sync(String(pin), salt, 120000, 32, 'sha256').toString('hex');
+}
+
+function newSalt() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+function newToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+/** Compare without leaking, through timing, how much of the hash matched. */
+function sameHash(a, b) {
+  const x = Buffer.from(String(a || ''), 'utf8');
+  const y = Buffer.from(String(b || ''), 'utf8');
+  if (x.length !== y.length) return false;
+  return crypto.timingSafeEqual(x, y);
+}
+
 // ---------------------------------------------------------------- misc
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1
@@ -258,4 +304,11 @@ module.exports = {
   dayKey,
   dailyPrompts,
   DAILY_LOGOS,
+  nameKey,
+  validName,
+  validPin,
+  hashPin,
+  newSalt,
+  newToken,
+  sameHash,
 };
