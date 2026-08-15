@@ -32,6 +32,17 @@ async function main() {
   await host.goto(BASE);
   await host.waitForTimeout(400);
   check('home screen visible', await visible(host, '#home'));
+  // The daily challenge leads the home screen, with its board under it.
+  const homeOrder = await host.evaluate(() =>
+    ['btnDaily', 'homeBoard', 'btnCreate', 'btnJoin'].map((id) => {
+      const el = document.getElementById(id);
+      return el ? el.getBoundingClientRect().top : -1;
+    }));
+  check('daily challenge sits above create room', homeOrder[0] < homeOrder[2], homeOrder.join(' '));
+  check('daily board sits between them',
+    homeOrder[1] > homeOrder[0] && homeOrder[1] < homeOrder[2], homeOrder.join(' '));
+  check('home shows the daily date', /^\d{4}-\d{2}-\d{2}$/.test((await host.textContent('#homeDay')).trim()),
+    (await host.textContent('#homeDay')).trim());
   await host.screenshot({ path: `${SHOTS}/1-home.png`, fullPage: true });
 
   // ---- create room ----
@@ -266,6 +277,21 @@ async function main() {
   check('the board totals a whole run, not one logo',
     scores[0] === parseFloat(totalTxt), `${scores[0]} vs ${totalTxt}`);
   await rival.screenshot({ path: `${SHOTS}/8-daily-board.png`, fullPage: true });
+
+  // Back on the home screen, the same standings should be waiting.
+  await rival.click('#btnDailyHome');
+  await rival.waitForSelector('#home:not(.hide)', { timeout: 10000 });
+  await rival.waitForTimeout(900);
+  check('home board fills in after playing',
+    (await rival.locator('#homeBoard .prow').count()) === 2,
+    String(await rival.locator('#homeBoard .prow').count()));
+  check('home board marks you', (await rival.locator('#homeBoard .prow.me').count()) === 1);
+  check('home shows your standing', /#\d/.test(await rival.textContent('#homeRank')),
+    (await rival.textContent('#homeRank')).trim());
+  check('the daily button knows you have finished',
+    /result/i.test(await rival.textContent('#btnDaily')),
+    (await rival.textContent('#btnDaily')).trim());
+  await rival.screenshot({ path: `${SHOTS}/9-home-board.png`, fullPage: true });
 
   check('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

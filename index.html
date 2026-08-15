@@ -196,10 +196,34 @@
     <div class="card stack">
       <h1 style="font-size:26px">Guess the brand colour.<br />Beat your friends.</h1>
       <p class="muted">
-        Each round shows a famous logo, drained of colour. Rebuild that exact shade from
+        Every round shows a famous logo, drained of colour. Rebuild that exact shade from
         memory with the hue, saturation and brightness sliders — the logo repaints itself
-        as you drag. Five rounds, closest wins.
+        as you drag. Play today's three, or start a room and race your friends.
       </p>
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <p class="muted" style="font-weight:700;color:var(--text)">Daily challenge</p>
+        <span id="homeDay" class="pill">—</span>
+      </div>
+      <p class="tiny">
+        Three logos a day, the same three for everybody. One shot each and your
+        scores add up — 30 is perfect.
+      </p>
+      <button id="btnDaily" class="wide">Play today's logos</button>
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="font-size:15px">Today's leaderboard</h3>
+        <span id="homeRank" class="pill">—</span>
+      </div>
+      <div id="homeBoard" class="plist"></div>
+      <p id="homeBoardEmpty" class="tiny hide" style="text-align:center">
+        Nobody's played today yet. Be first.
+      </p>
+      <p id="homeBoardMore" class="tiny hide" style="text-align:center"></p>
     </div>
 
     <div class="card stack">
@@ -214,15 +238,6 @@
              autocomplete="off" autocapitalize="characters" spellcheck="false" />
       <button id="btnJoin" class="ghost wide">Join room</button>
       <p id="homeErr" class="err hide"></p>
-    </div>
-
-    <div class="card stack">
-      <p class="muted" style="font-weight:700;color:var(--text)">Daily challenge</p>
-      <p class="tiny">
-        One logo a day, the same one for everybody. You get a single shot at it —
-        then you're on the day's leaderboard.
-      </p>
-      <button id="btnDaily" class="ghost wide">Play today's logo</button>
     </div>
   </section>
 
@@ -798,6 +813,7 @@
     me.code = ''; me.pid = ''; last = null; seenPhaseKey = ''; lockedRoundKey = '';
     history.replaceState(null, '', location.pathname);
     show('home');
+    loadHomeDaily();
     if (msg) {
       $('homeErr').textContent = msg;
       $('homeErr').classList.remove('hide');
@@ -1036,6 +1052,46 @@
     }
   }
 
+  const HOME_BOARD_ROWS = 5;
+
+  /** The daily standings on the home screen, so the board is the first thing
+      you see rather than something you have to go looking for. */
+  function renderHomeDaily(st) {
+    $('homeDay').textContent = st.day;
+    $('btnDaily').textContent = st.finished
+      ? "See today's result"
+      : st.index > 0
+        ? `Continue — logo ${st.index + 1} of ${st.total}`
+        : "Play today's logos";
+
+    $('homeRank').textContent = st.myRank
+      ? `You're #${st.myRank}`
+      : st.players === 1 ? '1 player' : `${st.players} players`;
+
+    const top = st.board.slice(0, HOME_BOARD_ROWS);
+    $('homeBoard').innerHTML = top.map((r) => `
+      <div class="prow ${r.you ? 'me' : ''}">
+        <span class="rank">${r.rank}</span>
+        <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}
+          ${r.done < st.total ? `<span class="tag">${r.done}/${st.total}</span>` : ''}</span>
+        <span class="sc">${r.total.toFixed(2)}</span>
+      </div>`).join('');
+    $('homeBoardEmpty').classList.toggle('hide', st.players > 0);
+
+    const rest = st.players - top.length;
+    $('homeBoardMore').textContent = rest > 0 ? `+ ${rest} more` : '';
+    $('homeBoardMore').classList.toggle('hide', rest <= 0);
+  }
+
+  async function loadHomeDaily() {
+    try {
+      const st = await api('daily', { pid: store.dailyPid() });
+      if (!st.error) renderHomeDaily(st);
+    } catch {
+      // Leave the placeholders be — the home screen still works without it.
+    }
+  }
+
   $('btnDaily').addEventListener('click', openDaily);
 
   $('btnDailyLock').addEventListener('click', async () => {
@@ -1124,8 +1180,13 @@
     if (known && store.name) join(code);
     else toast('Enter your name, then tap Join');
   }
+  loadHomeDaily();
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && me.code) pollOnce();
+    if (document.hidden) return;
+    if (me.code) pollOnce();
+    // Coming back to a home screen left open for hours shouldn't show a stale
+    // board, or yesterday's date.
+    else if (!$('home').classList.contains('hide')) loadHomeDaily();
   });
 })();
 </script>
