@@ -230,7 +230,7 @@
   <section id="daily" class="stack hide">
     <div class="hud">
       <span class="pill" id="dDay">Daily</span>
-      <span class="pill" id="dCount">—</span>
+      <span class="pill" id="dProgress">—</span>
     </div>
 
     <!-- No emoji until they've answered: a coloured one gives the game away. -->
@@ -257,9 +257,9 @@
         </div>
       </div>
       <input id="dName" type="text" maxlength="16" placeholder="Your name" autocomplete="nickname" />
-      <button id="btnDailyLock" class="wide">Lock in today's answer</button>
+      <button id="btnDailyLock" class="wide">Lock it in</button>
       <p id="dHint" class="tiny" style="text-align:center">
-        One shot — no timer, but no second go either.
+        Three logos, one shot each. Your scores add up.
       </p>
       <p id="dErr" class="err hide" style="text-align:center"></p>
     </div>
@@ -288,6 +288,14 @@
         <div class="scorebig" id="dScore">—</div>
         <p class="tiny" id="dScoreNote">out of 10</p>
       </div>
+      <button id="btnDailyNext" class="wide">Next logo</button>
+    </div>
+
+    <div class="card stack hide" id="dDone" style="text-align:center">
+      <p class="tiny" style="letter-spacing:.14em;text-transform:uppercase">Today's total</p>
+      <div class="scorebig" id="dTotal">—</div>
+      <p class="tiny" id="dTotalNote">out of 30</p>
+      <div class="recap" id="dRunRecap"></div>
       <button id="btnDailyShare" class="ghost wide">Share your score</button>
     </div>
 
@@ -633,14 +641,15 @@
     const t = st.target;
     $('rTarget').style.background = css(t.h, t.s, t.b);
     drawStage($('rTargetLogo'), st.prompt, css(t.h, t.s, t.b));
-    $('rTargetHex').innerHTML = `${t.hex}<br />H${t.h} · S${t.s} · B${t.b}`;
+    // Hex only. The H/S/B numbers map straight onto the sliders, so printing
+    // them would let anyone memorise a brand and dial it in exactly next time.
+    $('rTargetHex').textContent = t.hex;
 
     const mine = st.players.find((p) => p.pid === me.pid);
     if (mine && mine.guess) {
       $('rMine').style.background = css(mine.guess.h, mine.guess.s, mine.guess.b);
       drawStage($('rMineLogo'), st.prompt, css(mine.guess.h, mine.guess.s, mine.guess.b));
-      $('rMineHex').innerHTML =
-        `${hex(mine.guess.h, mine.guess.s, mine.guess.b)}<br />H${mine.guess.h} · S${mine.guess.s} · B${mine.guess.b}`;
+      $('rMineHex').textContent = hex(mine.guess.h, mine.guess.s, mine.guess.b);
       $('rScore').textContent = mine.score.toFixed(2);
       $('rScoreNote').textContent = mine.score >= 9 ? 'out of 10 — outstanding' :
         mine.score >= 7.5 ? 'out of 10 — very close' :
@@ -914,34 +923,72 @@
   let dailyPoll = null;
   let dailyState = null;
   let dailySending = false;
+  // Set when a guess has just been submitted, so the run pauses on that logo's
+  // reveal instead of jumping straight to the next one.
+  let dailyShowing = -1;
+
+  const scoreNote = (score) =>
+    score >= 9 ? 'out of 10 — outstanding' :
+    score >= 7.5 ? 'out of 10 — very close' :
+    score >= 5 ? 'out of 10 — not bad' : 'out of 10 — ouch';
 
   function renderDaily(st) {
     dailyState = st;
     $('dDay').textContent = st.day;
-    $('dCount').textContent = st.players === 1 ? '1 player' : st.players + ' players';
-    $('dBrand').textContent = st.prompt.brand;
-    $('dElement').textContent = st.prompt.element;
-    dPicker.setPrompt(st.prompt);
 
-    $('dPick').classList.toggle('hide', st.played);
-    $('dResult').classList.toggle('hide', !st.played);
+    const showing = dailyShowing >= 0 && st.results[dailyShowing] ? dailyShowing : -1;
+    const onReveal = showing >= 0;
+    const finished = st.finished && showing < 0;
 
-    if (st.played && st.target && st.mine) {
-      const t = st.target, m = st.mine;
-      $('dEmoji').textContent = st.prompt.emoji || '🎨';
-      $('dResultBrand').textContent = st.prompt.brand;
-      $('dResultElement').textContent = st.prompt.element;
+    $('dProgress').textContent = st.finished
+      ? `${st.total} of ${st.total} done`
+      : `Logo ${Math.min(st.index + 1, st.total)} of ${st.total}`;
+
+    $('dPick').classList.toggle('hide', onReveal || st.finished);
+    $('dResult').classList.toggle('hide', !onReveal);
+    $('dDone').classList.toggle('hide', !finished);
+
+    if (st.prompt) {
+      $('dBrand').textContent = st.prompt.brand;
+      $('dElement').textContent = st.prompt.element;
+      dPicker.setPrompt(st.prompt);
+    }
+    // The prompt card would otherwise still name the last logo of the run.
+    if (st.finished) {
+      $('dBrand').textContent = "That's today's three";
+      $('dElement').textContent = 'Come back tomorrow for a new set';
+    }
+
+    if (onReveal) {
+      const r = st.results[showing];
+      const t = r.target, m = r.mine;
+      $('dEmoji').textContent = r.emoji || '🎨';
+      $('dResultBrand').textContent = r.brand;
+      $('dResultElement').textContent = r.element;
       $('dTarget').style.background = css(t.h, t.s, t.b);
-      drawStage($('dTargetLogo'), st.prompt, css(t.h, t.s, t.b));
-      $('dTargetHex').innerHTML = `${t.hex}<br />H${t.h} · S${t.s} · B${t.b}`;
+      drawStage($('dTargetLogo'), r, css(t.h, t.s, t.b));
+      // Hex only: the H/S/B numbers map straight onto the sliders, so printing
+      // them here would let anyone memorise a brand and dial it in next time.
+      $('dTargetHex').textContent = t.hex;
       $('dMine').style.background = css(m.h, m.s, m.b);
-      drawStage($('dMineLogo'), st.prompt, css(m.h, m.s, m.b));
-      $('dMineHex').innerHTML =
-        `${hex(m.h, m.s, m.b)}<br />H${m.h} · S${m.s} · B${m.b}`;
+      drawStage($('dMineLogo'), r, css(m.h, m.s, m.b));
+      $('dMineHex').textContent = hex(m.h, m.s, m.b);
       $('dScore').textContent = m.score.toFixed(2);
-      $('dScoreNote').textContent = m.score >= 9 ? 'out of 10 — outstanding' :
-        m.score >= 7.5 ? 'out of 10 — very close' :
-        m.score >= 5 ? 'out of 10 — not bad' : 'out of 10 — ouch';
+      $('dScoreNote').textContent = scoreNote(m.score);
+      const last = showing >= st.total - 1;
+      $('btnDailyNext').textContent = last ? "See today's total" : `Next logo (${showing + 2} of ${st.total})`;
+    }
+
+    if (finished) {
+      $('dTotal').textContent = st.myTotal.toFixed(2);
+      $('dTotalNote').textContent = `out of ${st.total * 10}`;
+      $('dRunRecap').innerHTML = st.results.map((r, i) => `
+        <div class="rrow">
+          <span class="chip" style="background:${css(r.target.h, r.target.s, r.target.b)}"></span>
+          <span class="nm">${r.emoji} ${esc(r.brand)}
+            <small>${esc(r.element)} · ${r.target.hex}</small></span>
+          <span class="sc">${r.mine.score.toFixed(2)}</span>
+        </div>`).join('');
     }
 
     $('dRank').textContent = st.myRank ? `You're #${st.myRank}` : 'Not on the board';
@@ -949,9 +996,9 @@
     $('dBoard').innerHTML = st.board.map((r) => `
       <div class="prow ${r.you ? 'me' : ''}">
         <span class="rank">${r.rank}</span>
-        <span class="chip" style="background:${css(r.guess.h, r.guess.s, r.guess.b)}"></span>
-        <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}</span>
-        <span class="sc">${r.score.toFixed(2)}</span>
+        <span class="nm">${esc(r.name)}${r.you ? ' <span class="tag">you</span>' : ''}
+          ${r.done < st.total ? `<span class="tag">${r.done}/${st.total}</span>` : ''}</span>
+        <span class="sc">${r.total.toFixed(2)}</span>
       </div>`).join('');
   }
 
@@ -973,6 +1020,7 @@
       const st = await api('daily', { pid: store.dailyPid() });
       if (st.error) throw new Error(st.error);
       $('dName').value = store.name || $('name').value.trim();
+      dailyShowing = -1; // resume on the picker, not on an old reveal
       show('daily');
       renderDaily(st);
       stopDailyPoll();
@@ -991,10 +1039,11 @@
   $('btnDaily').addEventListener('click', openDaily);
 
   $('btnDailyLock').addEventListener('click', async () => {
-    if (dailySending || (dailyState && dailyState.played)) return;
+    if (dailySending || (dailyState && dailyState.finished)) return;
     dailySending = true;
     $('btnDailyLock').disabled = true;
     $('dErr').classList.add('hide');
+    const answering = dailyState ? dailyState.index : 0;
     try {
       // The daily board is public, so the name is set here rather than being
       // inherited from a room screen the player may never have seen.
@@ -1006,8 +1055,9 @@
       });
       if (st.error) throw new Error(st.error);
       store.name = name;
+      dailyShowing = answering;
       renderDaily(st);
-      if (st.already) toast("You'd already played today");
+      if (st.already) toast("You'd already finished today's run");
     } catch {
       $('dErr').textContent = "That didn't send — try once more.";
       $('dErr').classList.remove('hide');
@@ -1017,10 +1067,20 @@
     }
   });
 
+  $('btnDailyNext').addEventListener('click', () => {
+    dailyShowing = -1;
+    // Start each logo from the same place, so the last answer can't anchor the
+    // next one.
+    $('dH').value = 0; $('dS').value = 70; $('dB').value = 80;
+    dPicker.paint();
+    if (dailyState) renderDaily(dailyState);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
   $('btnDailyShare').addEventListener('click', () => {
     const st = dailyState;
-    if (!st || !st.mine) return;
-    const text = `Toon Tone Party ${st.day} — ${st.mine.score.toFixed(2)}/10 on ${st.prompt.brand}` +
+    if (!st || !st.finished) return;
+    const text = `Toon Tone Party ${st.day} — ${st.myTotal.toFixed(2)}/${st.total * 10}` +
       (st.myRank ? ` (#${st.myRank} of ${st.players})` : '');
     const url = location.origin + location.pathname;
     if (navigator.share) {

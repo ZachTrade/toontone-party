@@ -8,7 +8,7 @@ you drag**, so you're judging the colour on the real mark rather than an abstrac
 swatch. Closest guess wins the round.
 
 Five rounds, up to 12 players per room, live leaderboard, podium at the end — plus a
-daily challenge everyone plays against the same logo.
+daily challenge: three logos a day, same three for everyone, highest total wins.
 
 ## Deploying to Vercel
 
@@ -55,30 +55,45 @@ Rooms expire two hours after creation.
 
 ## Daily challenge
 
-One logo a day, the same one for everybody, on a global leaderboard. No room, no timer —
-but **one attempt**, which is what makes the score worth anything.
+**Three logos a day, the same three for everybody, highest total wins.** No room and no
+timer — but **one attempt per logo**, which is what makes the score worth anything. Best
+possible day is 30.00.
 
-- **Same logo for everyone.** Nothing random happens per request. The whole prompt list
-  is shuffled once by a fixed seed and the day walks one step along it, so every player
-  on a date gets the same brand and no prompt returns until all 94 have had a turn.
-- **The target is pinned on first play.** `dailyPrompt` derives from the brand list, so
-  a deploy that adds a brand would otherwise shift the answer mid-day and score people
-  against different colours than their friends. The first request of the day writes the
-  prompt to Redis with `SET NX`; everyone after reads that.
-- **One shot.** The guess is stored with `HSETNX`, so a reload, a second tab or a
-  re-submit can't fish for a better score. Enforced server-side, not by a disabled
-  button.
-- **The answer stays hidden** until you've played — including the emoji, which would
-  otherwise give the colour away.
-- **The day rolls over at midnight Malaysia time** (UTC+8), not UTC, so "today's logo"
+- **Same logos for everyone.** Nothing random happens per request. The prompt list is
+  shuffled once by a fixed seed and each day walks three steps along it, so every player
+  on a date gets the same brands in the same order, no logo repeats inside a day, and
+  none returns until all 94 have had a turn.
+- **The targets are pinned on first play.** `dailyPrompts` derives from the brand list,
+  so a deploy that adds a brand would otherwise shift the answers mid-day and score
+  latecomers against different colours than their friends. The day's first request
+  writes the run to Redis; everyone after reads that.
+- **One shot per logo.** Answers are stored per player per index with `HSETNX`, so a
+  reload, a second tab or a re-submit can't fish for a better score. Which logo a
+  submission answers is counted server-side and never taken from the request, so a
+  crafted index can't overwrite or skip one.
+- **Unplayed answers never reach the client.** Only logos you've already done come back
+  with their colour attached — an unplayed target in the JSON is the answer sitting in
+  devtools. The emoji is withheld too, since a coloured one gives the game away.
+- **The day rolls over at midnight Malaysia time** (UTC+8), not UTC, so today's set
   changes overnight for the people playing rather than mid-morning. It's one constant,
-  `DAY_OFFSET_MINUTES` in `api/_lib.js`.
+  `DAY_OFFSET_MINUTES` in `api/_lib.js`. `DAILY_LOGOS` sets how many.
+
+The board ranks on the accumulated total and marks anyone still mid-run (`2/3`), so it
+reads honestly through the day.
 
 Identity is a random id in `localStorage`, so the board is per-browser and anyone can
 put any name on it. That's the right trade for a party game; it is not cheat-proof and
 isn't trying to be.
 
 Boards are kept for three days.
+
+## What the reveal shows
+
+The reveal gives you the real colour beside yours as a swatch, the same logo tinted both
+ways, and each colour's **hex** — but not its H/S/B numbers. Those map one-to-one onto
+the sliders, so printing them would let anyone note a brand down once and dial it in
+exactly ever after. The hex still tells you the answer without handing over slider
+positions. This applies to both the room game and the daily challenge.
 
 ## Scoring
 

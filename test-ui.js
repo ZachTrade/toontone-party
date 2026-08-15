@@ -111,6 +111,12 @@ async function main() {
   check('reveal shows the mark in both colours',
     (await host.locator('#rTargetLogo svg.logo').count()) === 1 &&
     (await host.locator('#rMineLogo svg.logo').count()) === 1);
+  // H/S/B map straight onto the sliders, so the reveal must not print them —
+  // otherwise a brand seen once can be dialled in exactly ever after.
+  const revealNums = (await host.textContent('#rTargetHex')) + (await host.textContent('#rMineHex'));
+  check('reveal hides the H/S/B numbers',
+    !/\bH\s*\d|\bS\s*\d|\bB\s*\d/.test(revealNums), revealNums.trim());
+  check('reveal still names the colour', /#[0-9A-F]{6}/i.test(revealNums), revealNums.trim());
   check('both guesses listed', (await host.locator('#revealList .prow').count()) === 2);
   check('leaderboard listed', (await host.locator('#revealBoard .prow').count()) === 2);
   await host.screenshot({ path: `${SHOTS}/4-reveal.png`, fullPage: true });
@@ -194,41 +200,71 @@ async function main() {
   const dAfter = await solo.locator('#dStage svg.logo').evaluate((el) =>
     [...el.querySelectorAll('[fill]')].map((n) => n.getAttribute('fill')).join(','));
   check('daily logo re-tints with the sliders', dBefore !== dAfter);
-  await solo.locator('#dH').fill('40');
-  await solo.waitForTimeout(150);
 
-  await solo.click('#btnDailyLock');
-  await solo.waitForSelector('#dResult:not(.hide)', { timeout: 10000 });
-  const dScore = (await solo.textContent('#dScore')).trim();
-  check('daily guess is scored', /^\d+\.\d{2}$/.test(dScore), dScore);
-  check('daily reveal compares both colours',
-    (await solo.locator('#dTargetLogo svg.logo').count()) === 1 &&
-    (await solo.locator('#dMineLogo svg.logo').count()) === 1);
-  check('sliders are gone once you have played', !(await visible(solo, '#dPick')));
-  check('you appear on the daily board',
-    (await solo.locator('#dBoard .prow.me').count()) === 1);
+  // ---- the run: three logos, scores adding up ----
+  const runBrands = [];
+  const runScores = [];
+  for (let i = 1; i <= 3; i++) {
+    check(`run shows logo ${i} of 3`,
+      (await solo.textContent('#dProgress')).trim() === `Logo ${i} of 3`,
+      (await solo.textContent('#dProgress')).trim());
+    runBrands.push((await solo.textContent('#dBrand')).trim());
+    await solo.locator('#dH').fill(String(30 + i * 40));
+    await solo.click('#btnDailyLock');
+    await solo.waitForSelector('#dResult:not(.hide)', { timeout: 10000 });
+    const s1 = (await solo.textContent('#dScore')).trim();
+    check(`logo ${i} is scored`, /^\d+\.\d{2}$/.test(s1), s1);
+    runScores.push(parseFloat(s1));
+
+    // The reveal must not print numbers that map straight back onto sliders.
+    const revealText = (await solo.textContent('#dTargetHex')) + (await solo.textContent('#dMineHex'));
+    check(`logo ${i} reveal hides the H/S/B numbers`,
+      !/\bH\s*\d|\bS\s*\d|\bB\s*\d/.test(revealText), revealText.trim());
+    check(`logo ${i} reveal still names the colour`, /#[0-9A-F]{6}/i.test(revealText), revealText.trim());
+
+    await solo.click('#btnDailyNext');
+    await solo.waitForTimeout(300);
+  }
+
+  check('the three logos are all different', new Set(runBrands).size === 3, runBrands.join(', '));
+  check('the run finishes after three', (await visible(solo, '#dDone')));
+  check('no sliders once the run is done', !(await visible(solo, '#dPick')));
+  const totalTxt = (await solo.textContent('#dTotal')).trim();
+  const summed = runScores.reduce((a, b) => a + b, 0);
+  check('total is the three scores added up', Math.abs(parseFloat(totalTxt) - summed) < 0.02,
+    `${totalTxt} vs ${summed.toFixed(2)}`);
+  check('the run recap lists all three', (await solo.locator('#dRunRecap .rrow').count()) === 3);
+  check('you appear on the daily board', (await solo.locator('#dBoard .prow.me').count()) === 1);
   await solo.screenshot({ path: `${SHOTS}/7-daily.png`, fullPage: true });
 
-  // Reload: the one-shot rule has to survive a fresh page, not just a disabled button.
+  // Reload: the one-shot rule has to survive a fresh page, not just a hidden button.
   await solo.reload();
   await solo.waitForTimeout(400);
   await solo.click('#btnDaily');
   await solo.waitForSelector('#daily:not(.hide)', { timeout: 10000 });
-  check('a reload cannot buy a second attempt',
-    (await visible(solo, '#dResult')) && !(await visible(solo, '#dPick')));
-  check('the score survives the reload',
-    (await solo.textContent('#dScore')).trim() === dScore);
+  check('a reload cannot buy a second run',
+    (await visible(solo, '#dDone')) && !(await visible(solo, '#dPick')));
+  check('the total survives the reload', (await solo.textContent('#dTotal')).trim() === totalTxt);
 
+  // A second player, deliberately worse, to prove the board accumulates and ranks.
   await rival.fill('#dName', 'Mia');
-  await rival.locator('#dH').fill('190');
-  await rival.click('#btnDailyLock');
-  await rival.waitForSelector('#dResult:not(.hide)', { timeout: 10000 });
+  for (let i = 1; i <= 3; i++) {
+    await rival.locator('#dH').fill('200');
+    await rival.locator('#dS').fill('5');
+    await rival.locator('#dB').fill('5');
+    await rival.click('#btnDailyLock');
+    await rival.waitForSelector('#dResult:not(.hide)', { timeout: 10000 });
+    await rival.click('#btnDailyNext');
+    await rival.waitForTimeout(300);
+  }
   const rows = await rival.locator('#dBoard .prow').count();
   check('the board is shared between players', rows === 2, String(rows));
   const names = (await rival.locator('#dBoard .nm').allTextContents()).join(' ');
   check('both players are listed', /Zach/.test(names) && /Mia/.test(names), names);
   const scores = (await rival.locator('#dBoard .sc').allTextContents()).map((t) => parseFloat(t));
-  check('the board is sorted best first', scores[0] >= scores[1], scores.join(' > '));
+  check('the board ranks on accumulated score', scores[0] >= scores[1], scores.join(' > '));
+  check('the board totals a whole run, not one logo',
+    scores[0] === parseFloat(totalTxt), `${scores[0]} vs ${totalTxt}`);
   await rival.screenshot({ path: `${SHOTS}/8-daily-board.png`, fullPage: true });
 
   check('no page errors', errors.length === 0, errors.join(' | '));

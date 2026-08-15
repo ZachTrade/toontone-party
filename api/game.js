@@ -8,7 +8,8 @@ const {
   randomCode,
   randomId,
   dayKey,
-  dailyPrompt,
+  dailyPrompts,
+  DAILY_LOGOS,
 } = require('./_lib.js');
 
 const GUESS_MS = 45000; // time to lock in a colour
@@ -386,45 +387,62 @@ async function opSubmit(body) {
 // ------------------------------------------------------------------ daily
 
 /**
- * The prompt for a day, pinned in Redis the first time anyone asks for it.
+ * A day's prompts, pinned in Redis the first time anyone asks for them.
  *
- * `dailyPrompt` is already deterministic, but it derives from the brand list —
- * so a deploy that adds a brand would shift the answer for everyone who hasn't
- * played yet, scoring them against a different colour than their friends.
- * Pinning it means the day's target is fixed by whoever plays first.
+ * `dailyPrompts` is already deterministic, but it derives from the brand list —
+ * so a deploy that adds a brand would shift the answers for everyone who hasn't
+ * played yet, scoring them against different colours than their friends.
+ * Pinning means the day's targets are fixed by whoever plays first.
  */
-async function loadDailyPrompt(day) {
+async function loadDailyPrompts(day) {
   const parse = (raw) => (typeof raw === 'string' ? JSON.parse(raw) : raw);
   const existing = await cmd('GET', kDailyPrompt(day));
-  if (existing) return parse(existing);
+  // A day pinned before the run grew to three logos would come back as one
+  // object rather than a list; treat anything unexpected as unpinned.
+  const usable = (v) => Array.isArray(v) && v.length === DAILY_LOGOS;
+  if (existing) {
+    const parsed = parse(existing);
+    if (usable(parsed)) return parsed;
+  }
 
-  const fresh = dailyPrompt(day);
-  await cmd('SET', kDailyPrompt(day), JSON.stringify(fresh), 'NX', 'EX', String(DAILY_TTL));
+  const fresh = dailyPrompts(day);
+  await cmd('SET', kDailyPrompt(day), JSON.stringify(fresh), 'EX', String(DAILY_TTL));
   // Re-read rather than trusting our own write: if two players arrived at once,
-  // the loser of the NX has to use the winner's prompt, not its own.
+  // the loser has to use the winner's prompts, not its own.
   const settled = await cmd('GET', kDailyPrompt(day));
-  return settled ? parse(settled) : fresh;
+  const parsed = settled ? parse(settled) : null;
+  return usable(parsed) ? parsed : fresh;
 }
 
+/** Field name for one player's answer to one logo. */
+const dailyField = (pid, i) => `${pid}#${i}`;
+
+/** Roll the flat "<pid>#<i>" hash up into one row per player. */
 function dailyBoard(entries, pid) {
-  const rows = Object.entries(entries)
-    .map(([id, e]) => ({
-      pid: id,
-      name: e.name,
-      score: e.score,
-      guess: { h: e.h, s: e.s, b: e.b },
-      at: e.at || 0,
-    }))
-    // Ties break towards whoever got there first.
-    .sort((a, b) => b.score - a.score || a.at - b.at);
+  const byPlayer = new Map();
+  for (const [field, e] of Object.entries(entries)) {
+    const id = field.slice(0, field.lastIndexOf('#'));
+    if (!id) continue;
+    const row = byPlayer.get(id) || { pid: id, name: e.name, total: 0, done: 0, at: 0 };
+    row.total += e.score || 0;
+    row.done += 1;
+    row.name = e.name || row.name;
+    row.at = Math.max(row.at, e.at || 0);
+    byPlayer.set(id, row);
+  }
+
+  const rows = [...byPlayer.values()]
+    .map((r) => ({ ...r, total: Math.round(r.total * 100) / 100 }))
+    // Ties break towards whoever finished first.
+    .sort((a, b) => b.total - a.total || a.at - b.at);
 
   const rank = rows.findIndex((r) => r.pid === pid);
   return {
     board: rows.slice(0, DAILY_BOARD_MAX).map((r, i) => ({
       rank: i + 1,
       name: r.name,
-      score: r.score,
-      guess: r.guess,
+      total: r.total,
+      done: r.done,
       you: r.pid === pid,
     })),
     myRank: rank === -1 ? null : rank + 1,
@@ -435,23 +453,41 @@ function dailyBoard(entries, pid) {
 async function opDaily(body) {
   const pid = clean(body.pid, 32);
   const day = dayKey();
-  const prompt = await loadDailyPrompt(day);
+  const prompts = await loadDailyPrompts(day);
   const entries = parsePlayers(await cmd('HGETALL', kDaily(day)));
-  const mine = pid ? entries[pid] : null;
+
+  // Answers are one-per-index, so how many exist is how far along they are.
+  const answers = [];
+  for (let i = 0; i < prompts.length; i++) {
+    const e = pid ? entries[dailyField(pid, i)] : null;
+    if (!e) break;
+    answers.push(e);
+  }
+  const index = answers.length;
+  const finished = index >= prompts.length;
 
   const out = {
     ok: true,
     now: Date.now(),
     day,
-    // The emoji hints at the colour, so it stays hidden until they've answered.
-    prompt: { brand: prompt.brand, element: prompt.element },
-    played: !!mine,
+    total: prompts.length,
+    index,
+    finished,
+    // Only the answered logos come back with their colour attached — an
+    // unplayed target sent to the client is the answer sitting in devtools.
+    results: answers.map((e, i) => ({
+      brand: prompts[i].brand,
+      element: prompts[i].element,
+      emoji: prompts[i].emoji,
+      target: { h: prompts[i].h, s: prompts[i].s, b: prompts[i].b, hex: prompts[i].hex },
+      mine: { h: e.h, s: e.s, b: e.b, score: e.score },
+    })),
+    myTotal: Math.round(answers.reduce((sum, e) => sum + (e.score || 0), 0) * 100) / 100,
     ...dailyBoard(entries, pid),
   };
-  if (mine) {
-    out.prompt.emoji = prompt.emoji;
-    out.mine = { h: mine.h, s: mine.s, b: mine.b, score: mine.score };
-    out.target = { h: prompt.h, s: prompt.s, b: prompt.b, hex: prompt.hex };
+  // The emoji hints at the colour, so the current logo ships without one.
+  if (!finished) {
+    out.prompt = { brand: prompts[index].brand, element: prompts[index].element, index };
   }
   return out;
 }
@@ -466,13 +502,25 @@ async function opDailySubmit(body) {
   if (h == null || s == null || b == null) return { error: 'bad_guess' };
 
   const day = dayKey();
-  const prompt = await loadDailyPrompt(day);
+  const prompts = await loadDailyPrompts(day);
+  const entries = parsePlayers(await cmd('HGETALL', kDaily(day)));
+
+  // Which logo this answers is counted server-side, never taken from the
+  // request — otherwise a crafted index could overwrite or skip a logo.
+  let index = 0;
+  while (index < prompts.length && entries[dailyField(pid, index)]) index++;
+  if (index >= prompts.length) {
+    const done = await opDaily({ pid });
+    return { ...done, already: true };
+  }
+
+  const prompt = prompts[index];
   const score = scoreGuess(prompt, { h, s, b });
   const entry = JSON.stringify({ name, h, s, b, score, at: Date.now() });
 
-  // One shot a day: HSETNX keeps the first answer, so a reload or a second tab
-  // can't be used to fish for a better score.
-  const first = await cmd('HSETNX', kDaily(day), pid, entry);
+  // One shot per logo: HSETNX keeps the first answer, so a reload or a second
+  // tab can't be used to fish for a better score.
+  const first = await cmd('HSETNX', kDaily(day), dailyField(pid, index), entry);
   if (first) await cmd('EXPIRE', kDaily(day), String(DAILY_TTL));
 
   const state = await opDaily({ pid });

@@ -106,26 +106,33 @@ async function main() {
   }
 
   console.log('\n== daily challenge ==');
-  const { dayKey, dailyPrompt } = require('./api/_lib.js');
-  // Everyone has to get the same logo, so nothing here may depend on when or
+  const { dayKey, dailyPrompts, DAILY_LOGOS } = require('./api/_lib.js');
+  // Everyone has to get the same logos, so nothing here may depend on when or
   // where it runs.
-  const d1 = dailyPrompt('2026-08-15');
-  const d2 = dailyPrompt('2026-08-15');
-  check('same day gives the same prompt', d1.brand === d2.brand && d1.hex === d2.hex,
-    `${d1.brand} vs ${d2.brand}`);
-  const d3 = dailyPrompt('2026-08-16');
-  check('the next day moves on', d3.brand !== d1.brand || d3.element !== d1.element,
-    `${d1.brand}/${d1.element}`);
-  check('prompt carries a scoreable target',
-    Number.isFinite(d1.h) && Number.isFinite(d1.s) && Number.isFinite(d1.b) && /^#/.test(d1.hex));
+  const d1 = dailyPrompts('2026-08-15');
+  const d2 = dailyPrompts('2026-08-15');
+  check('a day gives a run of logos', d1.length === DAILY_LOGOS, String(d1.length));
+  check('same day gives the same run',
+    d1.map((p) => p.brand + p.hex).join() === d2.map((p) => p.brand + p.hex).join(),
+    d1.map((p) => p.brand).join(', '));
+  check('no logo repeats inside a day',
+    new Set(d1.map((p) => p.brand + '|' + p.element)).size === DAILY_LOGOS,
+    d1.map((p) => p.brand).join(', '));
+  const d3 = dailyPrompts('2026-08-16');
+  check('the next day moves on',
+    d3.map((p) => p.brand).join() !== d1.map((p) => p.brand).join(),
+    d3.map((p) => p.brand).join(', '));
+  check('every prompt carries a scoreable target',
+    d1.every((p) => Number.isFinite(p.h) && Number.isFinite(p.s) && Number.isFinite(p.b) && /^#/.test(p.hex)));
   // Walking a fixed shuffle means no repeat until the list is exhausted.
   const seen = new Set();
-  for (let i = 0; i < BRANDS.length; i++) {
+  const days = Math.floor(BRANDS.length / DAILY_LOGOS);
+  for (let i = 0; i < days; i++) {
     const day = new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10);
-    seen.add(dailyPrompt(day).brand + '|' + dailyPrompt(day).element);
+    for (const p of dailyPrompts(day)) seen.add(p.brand + '|' + p.element);
   }
-  check('a full cycle uses every prompt once', seen.size === BRANDS.length,
-    `${seen.size}/${BRANDS.length}`);
+  check('a full cycle never repeats a prompt', seen.size === days * DAILY_LOGOS,
+    `${seen.size}/${days * DAILY_LOGOS}`);
   check('dayKey looks like a date', /^\d{4}-\d{2}-\d{2}$/.test(dayKey()), dayKey());
   // Malaysia is UTC+8, so 17:00 UTC is already tomorrow for players there.
   check('the day rolls over at midnight in Malaysia',
@@ -134,30 +141,57 @@ async function main() {
 
   const dA = await call('daily', { pid: 'aaa' });
   check('daily state loads', dA.ok && !!dA.prompt.brand, JSON.stringify(dA.error || ''));
-  check('the answer is hidden before you play', !dA.target && !dA.prompt.emoji && !dA.played);
+  check('run starts at the first logo', dA.index === 0 && dA.total === DAILY_LOGOS && !dA.finished);
+  check('no answers leak before you play',
+    dA.results.length === 0 && !dA.prompt.emoji && dA.myTotal === 0);
   check('board starts empty', dA.players === 0 && dA.board.length === 0);
 
-  const dSub = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 40, s: 80, b: 90 });
-  check('daily guess scored', typeof dSub.mine.score === 'number', JSON.stringify(dSub.error || ''));
-  check('the answer is revealed after playing', !!dSub.target && !!dSub.prompt.emoji && dSub.played);
-  check('you land on the board', dSub.players === 1 && dSub.myRank === 1);
+  const first = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 40, s: 80, b: 90 });
+  check('first guess scored', typeof first.results[0].mine.score === 'number',
+    JSON.stringify(first.error || ''));
+  check('the run advances', first.index === 1 && !first.finished);
+  check('only the played logo reveals its colour',
+    first.results.length === 1 && !!first.results[0].target && !!first.results[0].emoji);
+  check('the next logo arrives without its answer',
+    !!first.prompt.brand && !first.prompt.emoji);
 
-  const dRetry = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 200, s: 10, b: 10 });
-  check('one shot a day — a second go is ignored',
-    dRetry.already === true && dRetry.mine.h === 40, JSON.stringify(dRetry.mine));
+  const midRetry = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 111, s: 11, b: 11 });
+  check('a resubmit answers the next logo, never rewrites the last',
+    midRetry.results[0].mine.h === 40 && midRetry.index === 2, JSON.stringify(midRetry.index));
 
-  // A deliberately awful guess, so the ordering is unambiguous.
-  const target = dSub.target;
-  await call('dailySubmit', { pid: 'bbb', name: 'Mia', h: (target.h + 180) % 360, s: 5, b: 5 });
+  const done = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 200, s: 60, b: 60 });
+  check('three logos finishes the run', done.finished && done.index === DAILY_LOGOS);
+  check('no further prompt once finished', !done.prompt);
+  const summed = done.results.reduce((t, r) => t + r.mine.score, 0);
+  check('total is the sum of the run', Math.abs(done.myTotal - summed) < 0.011,
+    `${done.myTotal} vs ${summed}`);
+  check('you land on the board with the run total',
+    done.players === 1 && done.myRank === 1 && done.board[0].done === DAILY_LOGOS);
+
+  const extra = await call('dailySubmit', { pid: 'aaa', name: 'Zach', h: 0, s: 0, b: 0 });
+  check('a fourth guess is refused', extra.already === true && extra.myTotal === done.myTotal);
+
+  // Deliberately awful guesses, so the ordering is unambiguous.
+  for (let i = 0; i < DAILY_LOGOS; i++) {
+    const t = done.results[i].target;
+    await call('dailySubmit', { pid: 'bbb', name: 'Mia', h: (t.h + 180) % 360, s: 5, b: 5 });
+  }
   const dBoard = await call('daily', { pid: 'bbb' });
-  check('board ranks by score', dBoard.board[0].name === 'Zach' && dBoard.board[1].name === 'Mia',
-    dBoard.board.map((r) => r.name + ':' + r.score).join(', '));
+  check('board ranks by accumulated score',
+    dBoard.board[0].name === 'Zach' && dBoard.board[1].name === 'Mia',
+    dBoard.board.map((r) => r.name + ':' + r.total).join(', '));
   check('board marks who you are',
     dBoard.board.find((r) => r.you).name === 'Mia' && dBoard.myRank === 2);
-  check('board carries each guess colour, for the swatches',
-    dBoard.board.every((r) => Number.isFinite(r.guess.h)));
+  check('board shows how far each player got',
+    dBoard.board.every((r) => r.done === DAILY_LOGOS));
   check('a player with no guess is off the board',
     (await call('daily', { pid: 'ccc' })).myRank === null);
+
+  // Half-finished runs still show, so the board reads honestly mid-day.
+  await call('dailySubmit', { pid: 'ddd', name: 'Sam', h: 10, s: 50, b: 50 });
+  const partial = await call('daily', { pid: 'ddd' });
+  check('a partial run shows its progress',
+    partial.board.find((r) => r.you).done === 1, JSON.stringify(partial.board));
 
   console.log('\n== room flow ==');
   const host = await call('create', { name: 'Zach' });

@@ -193,31 +193,39 @@ function seededOrder(n, seed) {
   return a;
 }
 
+const DAILY_LOGOS = 3; // logos in a day's run; the scores add up
+
 /**
- * Today's prompt, identical for everyone.
+ * The day's prompts, identical for everyone.
  *
  * Nothing random happens per request: the whole prompt list is shuffled once by
- * a fixed seed, and the day walks one step along it. So every player on a given
- * date gets the same logo, and no prompt comes back until every other one has
- * had its turn.
+ * a fixed seed, and each day walks DAILY_LOGOS steps along it. So every player
+ * on a given date gets the same logos in the same order, no prompt repeats
+ * inside a day, and none comes back until every other one has had its turn.
  */
-function dailyPrompt(key) {
+function dailyPrompts(key, count) {
+  const n = count || DAILY_LOGOS;
   const order = seededOrder(BRANDS.length, 'toontone-daily-v1');
   const dayNumber = Math.floor(Date.parse(key + 'T00:00:00Z') / 86400000);
-  // JS % keeps the sign, and dates before 1970 would otherwise index backwards.
-  const step = ((dayNumber % BRANDS.length) + BRANDS.length) % BRANDS.length;
-  const pick = BRANDS[order[step]];
-  const hsb = hexToHsb(pick.hex);
-  return {
-    day: key,
-    brand: pick.brand,
-    element: pick.element,
-    emoji: pick.emoji,
-    hex: pick.hex,
-    h: hsb.h,
-    s: hsb.s,
-    b: hsb.b,
-  };
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    // JS % keeps the sign, and dates before 1970 would otherwise index backwards.
+    const step = (((dayNumber * n + i) % BRANDS.length) + BRANDS.length) % BRANDS.length;
+    const pick = BRANDS[order[step]];
+    const hsb = hexToHsb(pick.hex);
+    out.push({
+      day: key,
+      index: i,
+      brand: pick.brand,
+      element: pick.element,
+      emoji: pick.emoji,
+      hex: pick.hex,
+      h: hsb.h,
+      s: hsb.s,
+      b: hsb.b,
+    });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- misc
@@ -248,5 +256,6 @@ module.exports = {
   randomId,
   shuffle,
   dayKey,
-  dailyPrompt,
+  dailyPrompts,
+  DAILY_LOGOS,
 };
